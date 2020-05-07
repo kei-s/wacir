@@ -8,24 +8,34 @@ pub enum OpcodeType {
   OpConstant
 }
 
+impl OpcodeType {
+  pub fn from(op: Opcode) -> OpcodeType {
+    match op {
+      0 => OpcodeType::OpConstant,
+      _ => unimplemented!()
+    }
+  }
+
+  pub fn opcode(self) -> Opcode {
+    match self {
+      OpcodeType::OpConstant => 0,
+    }
+  }
+}
+
 pub struct Definition {
   pub name: String,
   pub operand_width: Vec<usize>
 }
 
-pub fn lookup(op: Opcode) -> Result<Definition, String> {
-  match op {
-    // TODO: 0u8
-    0u8 => Ok(Definition{ name: "OpConstant".to_string(), operand_width: vec![2] }),
-    _ => Err(format!("Opcode {} undefined.", op))
+pub fn lookup(op: Opcode) -> Definition {
+  match OpcodeType::from(op) {
+    OpcodeType::OpConstant => Definition{ name: "OpConstant".to_string(), operand_width: vec![2] }
   }
 }
 
 pub fn make(op: Opcode, operand: u16) -> Instructions {
-  let def = match lookup(op) {
-    Ok(def) => def,
-    Err(_) => return vec![]
-  };
+  let def = lookup(op);
 
   let mut instruction_len = 1;
   for w in &def.operand_width {
@@ -50,7 +60,7 @@ mod tests {
   #[test]
   fn test_make() {
       let tests = vec![
-        ( 0u8, 65534, vec![0u8, 255u8, 254u8])
+        ( OpcodeType::OpConstant.opcode(), 65534, vec![0u8, 255u8, 254u8])
       ];
 
       for (op, operand, expected) in tests {
