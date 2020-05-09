@@ -46,8 +46,8 @@ mod tests {
             "1 + 2".to_string(),
             vec![1, 2],
             vec![
-                make(OpcodeType::OpConstant.opcode(), 0),
-                make(OpcodeType::OpConstant.opcode(), 1),
+                make(&OpcodeType::OpConstant.opcode(), 0),
+                make(&OpcodeType::OpConstant.opcode(), 1),
             ],
         )];
 

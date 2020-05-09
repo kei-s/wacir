@@ -19,7 +19,7 @@ impl std::fmt::Debug for Instructions {
 
         let mut i = 0;
         while i < self.0.len() {
-            let def = lookup(self.0[i]);
+            let def = lookup(&Opcode(self.0[i]));
             let (operands, read) = read_operands(&def, &self.0[i + 1..]);
             out.push_str(&format!(
                 "{:04} {}\n",
@@ -52,24 +52,27 @@ impl Instructions {
     }
 }
 
-type Opcode = u8;
+#[derive(Debug)]
+pub struct Opcode(pub u8);
+
+impl Opcode {
+    pub fn t(&self) -> OpcodeType {
+        match self.0 {
+            0 => OpcodeType::OpConstant,
+            _ => unreachable!("No such opcode {:?}", self),
+        }
+    }
+}
 
 pub enum OpcodeType {
     OpConstant,
 }
 
 impl OpcodeType {
-    pub fn from(op: Opcode) -> OpcodeType {
-        match op {
-            0 => OpcodeType::OpConstant,
-            _ => unreachable!("No such opcode {}", op),
-        }
-    }
-
     pub fn opcode(&self) -> Opcode {
-        match self {
+        Opcode(match self {
             OpcodeType::OpConstant => 0,
-        }
+        })
     }
 }
 
@@ -78,8 +81,8 @@ pub struct Definition {
     pub operand_width: Vec<usize>,
 }
 
-pub fn lookup(op: Opcode) -> Definition {
-    match OpcodeType::from(op) {
+pub fn lookup(op: &Opcode) -> Definition {
+    match op.t() {
         OpcodeType::OpConstant => Definition {
             name: "OpConstant".to_string(),
             operand_width: vec![2],
@@ -87,7 +90,7 @@ pub fn lookup(op: Opcode) -> Definition {
     }
 }
 
-pub fn make(op: Opcode, operand: u16) -> Instructions {
+pub fn make(op: &Opcode, operand: u16) -> Instructions {
     let def = lookup(op);
 
     let mut instruction_len = 1;
@@ -95,8 +98,8 @@ pub fn make(op: Opcode, operand: u16) -> Instructions {
         instruction_len += w;
     }
 
-    let mut instruction = Vec::with_capacity(instruction_len);
-    instruction.push(op);
+    let mut instruction: Vec<u8> = Vec::with_capacity(instruction_len);
+    instruction.push(op.0);
 
     let bytes = operand.to_be_bytes();
     instruction.extend_from_slice(&bytes);
@@ -135,7 +138,7 @@ mod tests {
         )];
 
         for (op, operand, expected) in tests {
-            let instruction = make(op, operand);
+            let instruction = make(&op, operand);
 
             assert_eq!(instruction, expected);
         }
@@ -144,9 +147,9 @@ mod tests {
     #[test]
     fn test_instruction_string() {
         let instructions = vec![
-            make(OpcodeType::OpConstant.opcode(), 1),
-            make(OpcodeType::OpConstant.opcode(), 2),
-            make(OpcodeType::OpConstant.opcode(), 65535),
+            make(&OpcodeType::OpConstant.opcode(), 1),
+            make(&OpcodeType::OpConstant.opcode(), 2),
+            make(&OpcodeType::OpConstant.opcode(), 65535),
         ];
 
         let expected = r"0000 OpConstant 1
@@ -155,7 +158,7 @@ mod tests {
 ";
         let concatted = concat_instructions(instructions);
 
-        assert_eq!(expected, concatted.print());
+        assert_eq!(expected, format!("{:?}", concatted));
     }
 
     #[test]
@@ -163,8 +166,8 @@ mod tests {
         let tests = vec![(OpcodeType::OpConstant, 65535, 2)];
 
         for (op, operand, bytes_read) in tests {
-            let instruction = make(op.opcode(), operand);
-            let def = lookup(op.opcode());
+            let instruction = make(&op.opcode(), operand);
+            let def = lookup(&op.opcode());
 
             if let Some((_, ins)) = instruction.0.split_first() {
                 let (operands_read, n) = read_operands(&def, ins);
