@@ -1,4 +1,4 @@
-use super::code::Instructions;
+use super::code::{Instructions, concat_instructions};
 use super::object::Object;
 use super::ast::Program;
 
@@ -10,7 +10,7 @@ pub struct Compiler {
 impl Compiler {
   pub fn new() -> Compiler {
     Compiler {
-      instructions: vec![],
+      instructions: Instructions(vec![]),
       constants: vec![]
     }
   }
@@ -35,9 +35,7 @@ pub struct ByteCode {
 
 #[cfg(test)]
 mod tests {
-  use super::Compiler;
-  use super::Instructions;
-  use super::Object;
+  use super::*;
   use super::super::code::{OpcodeType,make};
   use super::super::ast::Program;
   use super::super::lexer::Lexer;
@@ -82,7 +80,7 @@ mod tests {
   }
 
   fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
-    let concated: Instructions = expected.concat();
+    let concated = concat_instructions(expected);
     assert_eq!(concated, actual);
   }
 
