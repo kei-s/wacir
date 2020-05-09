@@ -34,23 +34,6 @@ impl std::fmt::Debug for Instructions {
 }
 
 impl Instructions {
-    fn print(&self) -> String {
-        let mut out = String::new();
-
-        let mut i = 0;
-        while i < self.0.len() {
-            let def = lookup(self.0[i]);
-            let (operands, read) = read_operands(&def, &self.0[i + 1..]);
-            out.push_str(&format!(
-                "{:04} {}\n",
-                i,
-                self.fmt_instruction(def, operands)
-            ));
-            i += 1 + read;
-        }
-        out
-    }
-
     fn fmt_instruction(&self, def: Definition, operands: Vec<u16>) -> String {
         let operand_count = def.operand_width.len();
 
