@@ -1,5 +1,5 @@
 use super::ast::Program;
-use super::code::{concat_instructions, Instructions};
+use super::code::{ConcatInstructions, Instructions};
 use super::object::Object;
 
 pub struct Compiler {
@@ -77,7 +77,7 @@ mod tests {
     }
 
     fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
-        let concated = concat_instructions(expected);
+        let concated = expected.concat();
         assert_eq!(concated, actual);
     }
 

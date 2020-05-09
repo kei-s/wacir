@@ -3,14 +3,19 @@ use std::convert::TryInto;
 #[derive(PartialEq)]
 pub struct Instructions(pub Vec<u8>);
 
-pub fn concat_instructions(ins_vec: Vec<Instructions>) -> Instructions {
-    Instructions(
-        ins_vec
-            .into_iter()
-            .map(|ins| ins.0)
-            .collect::<Vec<Vec<u8>>>()
-            .concat(),
-    )
+pub trait ConcatInstructions {
+    fn concat(self) -> Instructions;
+}
+
+impl ConcatInstructions for Vec<Instructions> {
+    fn concat(self) -> Instructions {
+        Instructions(
+            self.into_iter()
+                .map(|ins| ins.0)
+                .collect::<Vec<Vec<u8>>>()
+                .concat(),
+        )
+    }
 }
 
 impl std::fmt::Debug for Instructions {
@@ -156,7 +161,7 @@ mod tests {
 0003 OpConstant 2
 0006 OpConstant 65535
 ";
-        let concatted = concat_instructions(instructions);
+        let concatted = instructions.concat();
 
         assert_eq!(expected, format!("{:?}", concatted));
     }
