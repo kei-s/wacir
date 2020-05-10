@@ -1,5 +1,5 @@
-use super::ast::Program;
-use super::code::{ConcatInstructions, Instructions};
+use super::ast::*;
+use super::code::*;
 use super::object::Object;
 
 pub struct Compiler {
@@ -16,7 +16,7 @@ impl Compiler {
     }
 
     pub fn compile(&mut self, program: Program) -> Result<(), String> {
-        Ok(())
+        program.compile(self)
     }
 
     pub fn bytecode(self) -> ByteCode {
@@ -24,6 +24,72 @@ impl Compiler {
             instructions: self.instructions,
             constants: self.constants,
         }
+    }
+
+    pub fn emit(&mut self, op: &Opcode, operand: usize) -> usize {
+        // TODO: `as u16` is OK?
+        let mut ins = make(op, operand as u16);
+        let pos = self.add_instruction(&mut ins);
+        pos
+    }
+
+    pub fn add_instruction(&mut self, ins: &mut Instructions) -> usize {
+        let pos_new_instruction = self.instructions.0.len();
+        self.instructions.0.append(&mut ins.0);
+        pos_new_instruction
+    }
+
+    pub fn add_constant(&mut self, obj: Object) -> usize {
+        self.constants.push(obj);
+        self.constants.len() - 1
+    }
+}
+
+trait Compile {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String>;
+}
+
+impl Compile for Program {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
+        for s in &self.statements {
+            s.compile(compiler)?
+        }
+        Ok(())
+    }
+}
+
+impl Compile for Statement {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
+        match self {
+            Statement::ExpressionStatement(stmt) => stmt.expression.compile(compiler),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Compile for Expression {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
+        match self {
+            Expression::InfixExpression(exp) => exp.compile(compiler),
+            Expression::IntegerLiteral(exp) => exp.compile(compiler),
+            _ => todo!(),
+        }
+    }
+}
+
+impl Compile for InfixExpression {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
+        self.left.compile(compiler)?;
+        self.right.compile(compiler)
+    }
+}
+
+impl Compile for IntegerLiteral {
+    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
+        let integer = Object::Integer(self.value);
+        let constant = compiler.add_constant(integer);
+        compiler.emit(&OpcodeType::OpConstant.opcode(), constant);
+        Ok(())
     }
 }
 
