@@ -49,49 +49,49 @@ trait Compile {
     fn compile(&self, compiler: &mut Compiler) -> Result<(), String>;
 }
 
-impl Compile for Program {
-    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
-        for s in &self.statements {
-            s.compile(compiler)?
+macro_rules! impl_compile {
+    ($ty:ty => ($self:ident, $compiler:ident) $block:block) => {
+        impl Compile for $ty {
+            fn compile(&$self, $compiler: &mut Compiler) -> Result<(), String> {
+                $block
+            }
         }
-        Ok(())
-    }
+    };
 }
 
-impl Compile for Statement {
-    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
-        match self {
-            Statement::ExpressionStatement(stmt) => stmt.expression.compile(compiler),
-            _ => todo!(),
-        }
+impl_compile!(Program => (self, compiler) {
+    for s in &self.statements {
+        s.compile(compiler)?
     }
-}
+    Ok(())
+});
 
-impl Compile for Expression {
-    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
-        match self {
-            Expression::InfixExpression(exp) => exp.compile(compiler),
-            Expression::IntegerLiteral(exp) => exp.compile(compiler),
-            _ => todo!(),
-        }
+impl_compile!(Statement => (self, compiler) {
+    match self {
+        Statement::ExpressionStatement(stmt) => stmt.expression.compile(compiler),
+        _ => todo!(),
     }
-}
+});
 
-impl Compile for InfixExpression {
-    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
-        self.left.compile(compiler)?;
-        self.right.compile(compiler)
+impl_compile!(Expression => (self, compiler) {
+    match self {
+        Expression::InfixExpression(exp) => exp.compile(compiler),
+        Expression::IntegerLiteral(exp) => exp.compile(compiler),
+        _ => todo!(),
     }
-}
+});
 
-impl Compile for IntegerLiteral {
-    fn compile(&self, compiler: &mut Compiler) -> Result<(), String> {
-        let integer = Object::Integer(self.value);
-        let constant = compiler.add_constant(integer);
-        compiler.emit(&OpcodeType::OpConstant.opcode(), constant);
-        Ok(())
-    }
-}
+impl_compile!(InfixExpression => (self, compiler) {
+    self.left.compile(compiler)?;
+    self.right.compile(compiler)
+});
+
+impl_compile!(IntegerLiteral => (self, compiler) {
+    let integer = Object::Integer(self.value);
+    let constant = compiler.add_constant(integer);
+    compiler.emit(&OpcodeType::OpConstant.opcode(), constant);
+    Ok(())
+});
 
 pub struct ByteCode {
     instructions: Instructions,
