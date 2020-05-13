@@ -88,7 +88,7 @@ impl_compile!(InfixExpression => (self, compiler) {
 impl_compile!(IntegerLiteral => (self, compiler) {
     let integer = Object::Integer(self.value);
     let constant = compiler.add_constant(integer);
-    compiler.emit(&OpcodeType::OpConstant.opcode(), constant);
+    compiler.emit(&Opcode::OpConstant, constant);
     Ok(())
 });
 
@@ -100,7 +100,7 @@ pub struct ByteCode {
 #[cfg(test)]
 mod tests {
     use super::super::ast::Program;
-    use super::super::code::{make, OpcodeType};
+    use super::super::code::*;
     use super::super::lexer::Lexer;
     use super::super::parser::Parser;
     use super::*;
@@ -111,8 +111,8 @@ mod tests {
             "1 + 2".to_string(),
             vec![1, 2],
             vec![
-                make(&OpcodeType::OpConstant.opcode(), &vec![0]),
-                make(&OpcodeType::OpConstant.opcode(), &vec![1]),
+                make(&Opcode::OpConstant, &vec![0]),
+                make(&Opcode::OpConstant, &vec![1]),
             ],
         )];
 

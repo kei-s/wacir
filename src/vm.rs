@@ -26,9 +26,9 @@ impl VM {
     pub fn run(&mut self) -> Result<(), String> {
         let mut ip = 0;
         while ip < self.instructions.0.len() {
-            let op = Opcode(self.instructions.0[ip]);
-            match op.t() {
-                OpcodeType::OpConstant => {
+            let op = Opcode::from(self.instructions.0[ip]);
+            match op {
+                Opcode::OpConstant => {
                     let const_index = read_uint16(&self.instructions, ip + 1);
                     ip += 2;
                     // TODO: clone() どうにかなるか
@@ -67,7 +67,7 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use super::super::ast::Program;
-    use super::super::code::{make, OpcodeType};
+    use super::super::code::*;
     use super::super::compiler::Compiler;
     use super::super::lexer::Lexer;
     use super::super::object::Object;
