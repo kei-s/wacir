@@ -39,7 +39,7 @@ impl std::fmt::Debug for Instructions {
 }
 
 impl Instructions {
-    fn fmt_instruction(&self, def: Definition, operands: Vec<u16>) -> String {
+    fn fmt_instruction(&self, def: Definition, operands: Vec<usize>) -> String {
         let operand_count = def.operand_width.len();
 
         if operands.len() != operand_count {
@@ -95,7 +95,7 @@ pub fn lookup(op: &Opcode) -> Definition {
     }
 }
 
-pub fn make(op: &Opcode, operand: u16) -> Instructions {
+pub fn make(op: &Opcode, operands: &Vec<usize>) -> Instructions {
     let def = lookup(op);
 
     let mut instruction_len = 1;
@@ -106,13 +106,22 @@ pub fn make(op: &Opcode, operand: u16) -> Instructions {
     let mut instruction: Vec<u8> = Vec::with_capacity(instruction_len);
     instruction.push(op.0);
 
-    let bytes = operand.to_be_bytes();
-    instruction.extend_from_slice(&bytes);
+    for i in 0..operands.len() {
+        let o = operands[i] as u16;
+        let width = def.operand_width[i];
+        match width {
+            2 => {
+                let bytes = o.to_be_bytes();
+                instruction.extend_from_slice(&bytes);
+            }
+            _ => unreachable!(),
+        }
+    }
 
     Instructions(instruction)
 }
 
-pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<u16>, usize) {
+pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
     let mut operands = Vec::with_capacity(def.operand_width.len());
     let mut offset = 0;
 
@@ -120,7 +129,7 @@ pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<u16>, usize) {
         match width {
             2 => {
                 let i = ins[offset..offset + 2].try_into().unwrap();
-                operands.push(u16::from_be_bytes(i));
+                operands.push(u16::from_be_bytes(i) as usize);
             }
             _ => {}
         }
@@ -142,23 +151,23 @@ mod tests {
     fn test_make() {
         let tests = vec![(
             OpcodeType::OpConstant.opcode(),
-            65534,
+            vec![65534],
             Instructions(vec![0u8, 255u8, 254u8]),
         )];
 
-        for (op, operand, expected) in tests {
-            let instruction = make(&op, operand);
+        for (op, operands, expected) in tests {
+            let instruction = make(&op, &operands);
 
-            assert_eq!(instruction, expected);
+            assert_eq!(instruction.0, expected.0);
         }
     }
 
     #[test]
     fn test_instruction_string() {
         let instructions = vec![
-            make(&OpcodeType::OpConstant.opcode(), 1),
-            make(&OpcodeType::OpConstant.opcode(), 2),
-            make(&OpcodeType::OpConstant.opcode(), 65535),
+            make(&OpcodeType::OpConstant.opcode(), &vec![1]),
+            make(&OpcodeType::OpConstant.opcode(), &vec![2]),
+            make(&OpcodeType::OpConstant.opcode(), &vec![65535]),
         ];
 
         let expected = r"0000 OpConstant 1
@@ -172,16 +181,16 @@ mod tests {
 
     #[test]
     fn test_read_operands() {
-        let tests = vec![(OpcodeType::OpConstant, 65535, 2)];
+        let tests = vec![(OpcodeType::OpConstant, vec![65535], 2)];
 
-        for (op, operand, bytes_read) in tests {
-            let instruction = make(&op.opcode(), operand);
+        for (op, operands, bytes_read) in tests {
+            let instruction = make(&op.opcode(), &operands);
             let def = lookup(&op.opcode());
 
             if let Some((_, ins)) = instruction.0.split_first() {
                 let (operands_read, n) = read_operands(&def, ins);
                 assert_eq!(bytes_read, n);
-                assert_eq!(operand, operands_read[0]);
+                assert_eq!(operands, operands_read);
             } else {
                 unreachable!()
             }

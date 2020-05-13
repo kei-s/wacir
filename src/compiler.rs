@@ -27,8 +27,7 @@ impl Compiler {
     }
 
     pub fn emit(&mut self, op: &Opcode, operand: usize) -> usize {
-        // TODO: `as u16` is OK?
-        let mut ins = make(op, operand as u16);
+        let mut ins = make(op, &vec![operand]);
         let pos = self.add_instruction(&mut ins);
         pos
     }
@@ -112,8 +111,8 @@ mod tests {
             "1 + 2".to_string(),
             vec![1, 2],
             vec![
-                make(&OpcodeType::OpConstant.opcode(), 0),
-                make(&OpcodeType::OpConstant.opcode(), 1),
+                make(&OpcodeType::OpConstant.opcode(), &vec![0]),
+                make(&OpcodeType::OpConstant.opcode(), &vec![1]),
             ],
         )];
 
