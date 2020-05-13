@@ -35,6 +35,7 @@ impl VM {
                     let constant = self.constants[const_index as usize].clone();
                     self.push(constant)?;
                 }
+                _ => todo!(),
             }
             ip += 1;
         }

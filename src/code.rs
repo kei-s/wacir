@@ -51,6 +51,7 @@ impl Instructions {
         }
 
         match operand_count {
+            0 => def.name,
             1 => format!("{} {}", def.name, operands[0]),
             _ => format!("ERROR: unhundled operand_count for {}", def.name),
         }
@@ -64,6 +65,7 @@ impl Opcode {
     pub fn t(&self) -> OpcodeType {
         match self.0 {
             0 => OpcodeType::OpConstant,
+            1 => OpcodeType::OpAdd,
             _ => unreachable!("No such opcode {:?}", self),
         }
     }
@@ -71,12 +73,14 @@ impl Opcode {
 
 pub enum OpcodeType {
     OpConstant,
+    OpAdd,
 }
 
 impl OpcodeType {
     pub fn opcode(&self) -> Opcode {
         Opcode(match self {
             OpcodeType::OpConstant => 0,
+            OpcodeType::OpAdd => 1,
         })
     }
 }
@@ -91,6 +95,10 @@ pub fn lookup(op: &Opcode) -> Definition {
         OpcodeType::OpConstant => Definition {
             name: "OpConstant".to_string(),
             operand_width: vec![2],
+        },
+        OpcodeType::OpAdd => Definition {
+            name: "OpAdd".to_string(),
+            operand_width: vec![],
         },
     }
 }
@@ -149,30 +157,33 @@ mod tests {
 
     #[test]
     fn test_make() {
-        let tests = vec![(
-            OpcodeType::OpConstant.opcode(),
-            vec![65534],
-            Instructions(vec![0u8, 255u8, 254u8]),
-        )];
+        let tests = vec![
+            (
+                OpcodeType::OpConstant,
+                vec![65534],
+                Instructions(vec![0u8, 255u8, 254u8]),
+            ),
+            (OpcodeType::OpAdd, vec![], Instructions(vec![1u8])),
+        ];
 
         for (op, operands, expected) in tests {
-            let instruction = make(&op, &operands);
+            let instruction = make(&op.opcode(), &operands);
 
-            assert_eq!(instruction.0, expected.0);
+            assert_eq!(instruction, expected);
         }
     }
 
     #[test]
     fn test_instruction_string() {
         let instructions = vec![
-            make(&OpcodeType::OpConstant.opcode(), &vec![1]),
+            make(&OpcodeType::OpAdd.opcode(), &vec![]),
             make(&OpcodeType::OpConstant.opcode(), &vec![2]),
             make(&OpcodeType::OpConstant.opcode(), &vec![65535]),
         ];
 
-        let expected = r"0000 OpConstant 1
-0003 OpConstant 2
-0006 OpConstant 65535
+        let expected = r"0000 OpAdd
+0001 OpConstant 2
+0004 OpConstant 65535
 ";
         let concatted = instructions.concat();
 
