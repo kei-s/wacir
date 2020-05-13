@@ -94,8 +94,8 @@ impl_compile!(IntegerLiteral => (self, compiler) {
 });
 
 pub struct ByteCode {
-    instructions: Instructions,
-    constants: Vec<Object>,
+    pub instructions: Instructions,
+    pub constants: Vec<Object>,
 }
 
 #[cfg(test)]

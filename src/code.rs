@@ -130,6 +130,10 @@ pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<u16>, usize) {
     (operands, offset)
 }
 
+pub fn read_uint16(ins: &Instructions, start: usize) -> u16 {
+    u16::from_be_bytes(ins.0[start..start + 2].try_into().unwrap())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
