@@ -2,14 +2,13 @@ use super::code::*;
 use super::compiler::*;
 use super::object::*;
 use std::convert::TryInto;
-use std::rc::Rc;
 
 const STACK_SIZE: usize = 2048;
 
 pub struct VM {
     constants: Vec<Object>,
     instructions: Instructions,
-    stack: Vec<Rc<Object>>,
+    stack: Vec<Object>,
     sp: usize,
 }
 
@@ -38,14 +37,14 @@ impl VM {
                 Opcode::OpAdd => {
                     let right = self.pop();
                     let left = self.pop();
-                    match (&*right, &*left) {
+                    match (&right, &left) {
                         (Object::Integer(right_value), Object::Integer(left_value)) => {
                             self.push(Object::Integer(right_value + left_value))?;
                         }
                         _ => {
                             return Err(format!(
                                 "unsupported object: right: {}, left: {}",
-                                right, left
+                                &right, &left
                             ))
                         }
                     }
@@ -61,23 +60,21 @@ impl VM {
             return Err("stack overflow".to_string());
         }
 
-        self.stack.push(Rc::clone(&Rc::new(o)));
+        self.stack.push(o);
         self.sp += 1;
 
         Ok(())
     }
 
-    fn pop(&mut self) -> Rc<Object> {
+    fn pop(&mut self) -> Object {
         let o = self.stack.pop();
         self.sp -= 1;
         o.unwrap()
     }
 
-    pub fn stack_top(self) -> Option<Rc<Object>> {
+    pub fn stack_top(&self) -> Option<&Object> {
         if self.sp > 0 {
-            self.stack
-                .get::<usize>((self.sp - 1).try_into().unwrap())
-                .map(|o| Rc::clone(o))
+            self.stack.get::<usize>((self.sp - 1).try_into().unwrap())
         } else {
             None
         }
