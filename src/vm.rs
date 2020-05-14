@@ -35,7 +35,21 @@ impl VM {
                     let constant = self.constants[const_index as usize].clone();
                     self.push(constant)?;
                 }
-                _ => todo!(),
+                Opcode::OpAdd => {
+                    let right = self.pop();
+                    let left = self.pop();
+                    match (&*right, &*left) {
+                        (Object::Integer(right_value), Object::Integer(left_value)) => {
+                            self.push(Object::Integer(right_value + left_value))?;
+                        }
+                        _ => {
+                            return Err(format!(
+                                "unsupported object: right: {}, left: {}",
+                                right, left
+                            ))
+                        }
+                    }
+                }
             }
             ip += 1;
         }
@@ -47,10 +61,16 @@ impl VM {
             return Err("stack overflow".to_string());
         }
 
-        self.stack.insert(self.sp, Rc::clone(&Rc::new(o)));
+        self.stack.push(Rc::clone(&Rc::new(o)));
         self.sp += 1;
 
         Ok(())
+    }
+
+    fn pop(&mut self) -> Rc<Object> {
+        let o = self.stack.pop();
+        self.sp -= 1;
+        o.unwrap()
     }
 
     pub fn stack_top(self) -> Option<Rc<Object>> {
@@ -67,7 +87,6 @@ impl VM {
 #[cfg(test)]
 mod tests {
     use super::super::ast::Program;
-    use super::super::code::*;
     use super::super::compiler::Compiler;
     use super::super::lexer::Lexer;
     use super::super::object::Object;
@@ -76,11 +95,7 @@ mod tests {
 
     #[test]
     fn test_integer_arithmetic() {
-        let tests = vec![
-            ("1", 1),
-            ("2", 2),
-            ("1 + 2", 2), // TODO: FIXME
-        ];
+        let tests = vec![("1", 1), ("2", 2), ("1 + 2", 3)];
 
         run_vm_tests(tests);
     }
