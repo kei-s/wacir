@@ -5,6 +5,7 @@ mod evaluator;
 mod lexer;
 mod object;
 mod parser;
+pub mod repl;
 mod token;
 mod vm;
 #[macro_use]

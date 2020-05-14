@@ -1,3 +1,7 @@
+use wacir::repl;
+
 fn main() {
-    println!("Hello, world!");
+    println!("Hello! This is the Monkey programming language!");
+    println!("Feel free to type in commands");
+    repl::start()
 }
