@@ -4,6 +4,8 @@ use super::object::*;
 use std::convert::TryInto;
 
 const STACK_SIZE: usize = 2048;
+const TRUE: Object = Object::Boolean(true);
+const FALSE: Object = Object::Boolean(false);
 
 pub struct VM {
     constants: Vec<Object>,
@@ -42,6 +44,15 @@ impl VM {
                 Opcode::OpPop => {
                     self.pop();
                 }
+                Opcode::OpTrue => {
+                    self.push(TRUE)?;
+                }
+                Opcode::OpFalse => {
+                    self.push(FALSE)?;
+                }
+                Opcode::OpEqual | Opcode::OpNotEqual | Opcode::OpGreaterThan => {
+                    self.execute_comparison(op)?;
+                }
                 //
                 // _ => todo!(),
             }
@@ -75,7 +86,7 @@ impl VM {
         let left = self.pop();
         match (&left, &right) {
             (Object::Integer(left_value), Object::Integer(right_value)) => {
-                self.execute_binary_integer_operation(op, left_value, right_value)?;
+                self.execute_binary_integer_operation(op, *left_value, *right_value)?;
             }
             _ => {
                 return Err(format!(
@@ -90,8 +101,8 @@ impl VM {
     fn execute_binary_integer_operation(
         &mut self,
         op: Opcode,
-        left_value: &i64,
-        right_value: &i64,
+        left_value: i64,
+        right_value: i64,
     ) -> Result<(), String> {
         let result = match op {
             Opcode::OpAdd => left_value + right_value,
@@ -101,6 +112,48 @@ impl VM {
             _ => return Err(format!("unknown integer oprerator: {:?}", op)),
         };
         self.push(Object::Integer(result))
+    }
+
+    fn execute_comparison(&mut self, op: Opcode) -> Result<(), String> {
+        let right = self.pop();
+        let left = self.pop();
+
+        if let (Object::Integer(left_value), Object::Integer(right_value)) = (&right, &left) {
+            return self.execute_integer_comparison(op, *left_value, *right_value);
+        }
+
+        match op {
+            Opcode::OpEqual => self.push(Self::native_bool_to_boolean_object(right == left)),
+            Opcode::OpNotEqual => self.push(Self::native_bool_to_boolean_object(right != left)),
+            _ => Err(format!("unknown operator: {:?} {} {}", op, right, left)),
+        }
+    }
+
+    fn execute_integer_comparison(
+        &mut self,
+        op: Opcode,
+        left_value: i64,
+        right_value: i64,
+    ) -> Result<(), String> {
+        match op {
+            Opcode::OpEqual => self.push(Self::native_bool_to_boolean_object(
+                right_value == left_value,
+            )),
+            Opcode::OpNotEqual => self.push(Self::native_bool_to_boolean_object(
+                right_value != left_value,
+            )),
+            Opcode::OpGreaterThan => self.push(Self::native_bool_to_boolean_object(
+                right_value > left_value,
+            )),
+            _ => Err(format!("unknown operator: {:?}", op)),
+        }
+    }
+
+    fn native_bool_to_boolean_object(input: bool) -> Object {
+        match input {
+            true => TRUE,
+            false => FALSE,
+        }
     }
 
     pub fn stack_top(&self) -> Option<&Object> {
@@ -141,7 +194,33 @@ mod tests {
         run_vm_tests(tests);
     }
 
-    fn run_vm_tests(tests: Vec<(&str, isize)>) {
+    #[test]
+    fn test_boolean_expressions() {
+        let tests = vec![
+            ("true", true),
+            ("false", false),
+            ("1 < 2", true),
+            ("1 > 2", false),
+            ("1 < 1", false),
+            ("1 > 1", false),
+            ("1 == 1", true),
+            ("1 != 1", false),
+            ("1 == 2", false),
+            ("1 != 2", true),
+            ("true == true", true),
+            ("false == false", true),
+            ("true == false", false),
+            ("true != false", true),
+            ("false != true", true),
+            ("(1 < 2) == true", true),
+            ("(1 < 2) == false", false),
+            ("(1 > 2) == true", false),
+            ("(1 > 2) == false", true),
+        ];
+        run_vm_tests(tests);
+    }
+
+    fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
         for (input, expected) in tests {
             let program = parse(input.to_string());
             let mut comp = Compiler::new();
@@ -168,15 +247,31 @@ mod tests {
         p.parse_program()
     }
 
-    fn test_expected_object(expected: &isize, actual: &Object) {
-        test_integer_object(&(*expected as i64), actual);
+    fn test_expected_object<T: Expectable>(expected: &T, actual: &Object) {
+        expected.assert_eq(actual);
     }
 
-    fn test_integer_object(expected: &i64, actual: &Object) {
-        if let Object::Integer(integer) = actual {
-            assert_eq!(expected, integer);
-        } else {
-            assert!(false, "object is not Integer. {}", actual)
+    trait Expectable {
+        fn assert_eq(&self, actual: &Object);
+    }
+
+    impl Expectable for i64 {
+        fn assert_eq(&self, actual: &Object) {
+            if let Object::Integer(integer) = actual {
+                assert_eq!(self, integer);
+            } else {
+                assert!(false, "object is not Integer. {}", actual)
+            }
+        }
+    }
+
+    impl Expectable for bool {
+        fn assert_eq(&self, actual: &Object) {
+            if let Object::Boolean(boolean) = actual {
+                assert_eq!(self, boolean);
+            } else {
+                assert!(false, "object is not Boolean. {}", actual)
+            }
         }
     }
 }

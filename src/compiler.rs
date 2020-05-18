@@ -80,38 +80,61 @@ impl_compile!(Expression => (self, compiler) {
     match self {
         Expression::InfixExpression(exp) => exp.compile(compiler),
         Expression::IntegerLiteral(exp) => exp.compile(compiler),
-        _ => todo!(),
+        Expression::Boolean(exp) => exp.compile(compiler),
+        _ => todo!("other expressions"),
     }
 });
 
 impl_compile!(InfixExpression => (self, compiler) {
+    if &*self.operator == "<" {
+        self.right.compile(compiler)?;
+        self.left.compile(compiler)?;
+        compiler.emit(Opcode::OpGreaterThan, &vec![]);
+        return Ok(())
+    }
+
     self.left.compile(compiler)?;
     self.right.compile(compiler)?;
+
     match &*self.operator {
         "+" => {
             compiler.emit(Opcode::OpAdd, &vec![]);
-            Ok(())
         }
         "-" => {
             compiler.emit(Opcode::OpSub, &vec![]);
-            Ok(())
         }
         "*" => {
             compiler.emit(Opcode::OpMul, &vec![]);
-            Ok(())
         }
         "/" => {
             compiler.emit(Opcode::OpDiv, &vec![]);
-            Ok(())
         }
-        other => Err(format!("unknown operator {}", other))
+        ">" => {
+            compiler.emit(Opcode::OpGreaterThan, &vec![]);
+        }
+        "==" => {
+            compiler.emit(Opcode::OpEqual, &vec![]);
+        }
+        "!=" => {
+            compiler.emit(Opcode::OpNotEqual, &vec![]);
+        }
+        other => return Err(format!("unknown operator {}", other))
     }
+    Ok(())
 });
 
 impl_compile!(IntegerLiteral => (self, compiler) {
     let integer = Object::Integer(self.value);
     let constant = compiler.add_constant(integer);
     compiler.emit(Opcode::OpConstant, &vec![constant]);
+    Ok(())
+});
+
+impl_compile!(Boolean => (self, compiler) {
+    match self.value {
+        true => compiler.emit(Opcode::OpTrue, &vec![]),
+        false => compiler.emit(Opcode::OpFalse, &vec![])
+    };
     Ok(())
 });
 
@@ -178,6 +201,84 @@ mod tests {
                     make(Opcode::OpConstant, &vec![0]),
                     make(Opcode::OpConstant, &vec![1]),
                     make(Opcode::OpDiv, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests);
+    }
+
+    #[test]
+    fn test_boolean_expressions() {
+        let tests = vec![
+            (
+                "true",
+                vec![],
+                vec![make(Opcode::OpTrue, &vec![]), make(Opcode::OpPop, &vec![])],
+            ),
+            (
+                "false",
+                vec![],
+                vec![make(Opcode::OpFalse, &vec![]), make(Opcode::OpPop, &vec![])],
+            ),
+            (
+                "1 > 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpGreaterThan, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1 < 2",
+                vec![2, 1],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpGreaterThan, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1 == 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpEqual, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1 != 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpNotEqual, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "true == false",
+                vec![],
+                vec![
+                    make(Opcode::OpTrue, &vec![]),
+                    make(Opcode::OpFalse, &vec![]),
+                    make(Opcode::OpEqual, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "true != false",
+                vec![],
+                vec![
+                    make(Opcode::OpTrue, &vec![]),
+                    make(Opcode::OpFalse, &vec![]),
+                    make(Opcode::OpNotEqual, &vec![]),
                     make(Opcode::OpPop, &vec![]),
                 ],
             ),

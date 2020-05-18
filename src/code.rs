@@ -145,7 +145,12 @@ opcode_enum!(
         OpPop: [],
         OpSub: [],
         OpMul: [],
-        OpDiv: []
+        OpDiv: [],
+        OpTrue: [],
+        OpFalse: [],
+        OpEqual: [],
+        OpNotEqual: [],
+        OpGreaterThan: []
     ]
 );
 
