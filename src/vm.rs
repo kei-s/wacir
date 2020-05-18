@@ -10,6 +10,7 @@ pub struct VM {
     instructions: Instructions,
     stack: Vec<Object>,
     sp: usize,
+    pub last_popped_stack_elem: Option<Object>,
 }
 
 impl VM {
@@ -19,6 +20,7 @@ impl VM {
             instructions: bytecode.instructions,
             stack: Vec::with_capacity(STACK_SIZE),
             sp: 0,
+            last_popped_stack_elem: None,
         }
     }
 
@@ -49,6 +51,9 @@ impl VM {
                         }
                     }
                 }
+                Opcode::OpPop => {
+                    self.pop();
+                }
             }
             ip += 1;
         }
@@ -69,7 +74,10 @@ impl VM {
     fn pop(&mut self) -> Object {
         let o = self.stack.pop();
         self.sp -= 1;
-        o.unwrap()
+        let obj = o.unwrap();
+        // TODO: obj.clone()
+        self.last_popped_stack_elem = Some(obj.clone());
+        obj
     }
 
     pub fn stack_top(&self) -> Option<&Object> {
@@ -110,7 +118,7 @@ mod tests {
                 assert!(false, "vm error: {}", err);
             }
 
-            if let Some(stack_elem) = vm.stack_top() {
+            if let Some(stack_elem) = vm.last_popped_stack_elem {
                 test_expected_object(&expected, &stack_elem);
             } else {
                 assert!(false, "stack_elem is None.");

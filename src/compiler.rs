@@ -67,7 +67,11 @@ impl_compile!(Program => (self, compiler) {
 
 impl_compile!(Statement => (self, compiler) {
     match self {
-        Statement::ExpressionStatement(stmt) => stmt.expression.compile(compiler),
+        Statement::ExpressionStatement(stmt) => {
+            stmt.expression.compile(compiler)?;
+            compiler.emit(Opcode::OpPop, &vec![]);
+            Ok(())
+        },
         _ => todo!(),
     }
 });
@@ -114,22 +118,35 @@ mod tests {
 
     #[test]
     fn test_integer_arithmetic() {
-        let tests = vec![(
-            "1 + 2".to_string(),
-            vec![1, 2],
-            vec![
-                make(Opcode::OpConstant, &vec![0]),
-                make(Opcode::OpConstant, &vec![1]),
-                make(Opcode::OpAdd, &vec![]),
-            ],
-        )];
+        let tests = vec![
+            (
+                "1 + 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpAdd, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1; 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpPop, &vec![]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+        ];
 
         run_compile_tests(tests);
     }
 
-    fn run_compile_tests(tests: Vec<(String, Vec<i64>, Vec<Instructions>)>) {
+    fn run_compile_tests(tests: Vec<(&str, Vec<i64>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
-            let program = parse(input);
+            let program = parse(input.to_string());
 
             let mut compiler = Compiler::new();
             if let Err(err) = compiler.compile(program) {

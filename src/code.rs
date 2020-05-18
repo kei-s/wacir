@@ -102,7 +102,7 @@ macro_rules! opcode_enum {
     };
 }
 
-opcode_enum!(Opcode, [OpConstant, OpAdd]);
+opcode_enum!(Opcode, [OpConstant, OpAdd, OpPop]);
 
 pub struct Definition {
     pub name: String,
@@ -117,6 +117,10 @@ pub fn lookup(op: &Opcode) -> Definition {
         },
         Opcode::OpAdd => Definition {
             name: "OpAdd".to_string(),
+            operand_width: vec![],
+        },
+        Opcode::OpPop => Definition {
+            name: "OpPop".to_string(),
             operand_width: vec![],
         },
     }

@@ -33,7 +33,7 @@ pub fn start() {
       continue;
     }
 
-    match machine.stack_top() {
+    match machine.last_popped_stack_elem {
       Some(stack_top) => println!("{}", stack_top),
       None => println!("None."),
     }
