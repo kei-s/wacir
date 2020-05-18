@@ -58,9 +58,17 @@ impl Instructions {
     }
 }
 
+pub struct Definition {
+    pub name: String,
+    pub operand_width: Vec<usize>,
+}
+
+// Macro to generate below codes
+//
 // pub enum Opcode {
 //     OpConstant,
 //     OpAdd,
+//     ...
 // }
 //
 // impl Opcode {
@@ -75,69 +83,71 @@ impl Instructions {
 //         if byte == Opcode::OpAdd.byte() {
 //             return Opcode::OpAdd;
 //         }
+//         ...
 //         unreachable!("No such opcode {}", byte)
 //     }
 // }
+//
+// pub fn lookup(op: &Opcode) -> Definition {
+//     match op {
+//         Opcode::OpConstant => Definition {
+//             name: "OpConstant".to_string(),
+//             operand_width: vec![2],
+//         },
+//         Opcode::OpAdd => Definition {
+//             name: "OpAdd".to_string(),
+//             operand_width: vec![],
+//         },
+//         ...
+//     }
+// }
 macro_rules! opcode_enum {
-    ($name:ident, [ $($var:ident),+ ]) => {
+    ($opcode:ident, [ $($var:ident: $width:tt),+ ]) => {
         #[repr(u8)]
         #[derive(Debug)]
-        pub enum $name {
+        pub enum $opcode {
             $($var,)+
         }
 
-        impl $name {
+        impl $opcode {
             pub fn byte(self) -> u8 {
                 self as u8
             }
 
-            pub fn from(byte: u8) -> $name {
+            pub fn from(byte: u8) -> $opcode {
                 $(
-                    if byte == $name::$var.byte() {
-                        return $name::$var;
+                    if byte == $opcode::$var.byte() {
+                        return $opcode::$var;
                     }
                 )+
                 panic!("No such opcode {}", byte)
             }
         }
+
+        pub fn lookup(op: &$opcode) -> Definition {
+            match op {
+                $(
+                    $opcode::$var => Definition {
+                        name: stringify!($var).to_string(),
+                        operand_width: vec!$width
+                    },
+                )+
+            }
+        }
     };
 }
 
-opcode_enum!(Opcode, [OpConstant, OpAdd, OpPop, OpSub, OpMul, OpDiv]);
-
-pub struct Definition {
-    pub name: String,
-    pub operand_width: Vec<usize>,
-}
-
-pub fn lookup(op: &Opcode) -> Definition {
-    match op {
-        Opcode::OpConstant => Definition {
-            name: "OpConstant".to_string(),
-            operand_width: vec![2],
-        },
-        Opcode::OpAdd => Definition {
-            name: "OpAdd".to_string(),
-            operand_width: vec![],
-        },
-        Opcode::OpPop => Definition {
-            name: "OpPop".to_string(),
-            operand_width: vec![],
-        },
-        Opcode::OpSub => Definition {
-            name: "OpSub".to_string(),
-            operand_width: vec![],
-        },
-        Opcode::OpMul => Definition {
-            name: "OpMul".to_string(),
-            operand_width: vec![],
-        },
-        Opcode::OpDiv => Definition {
-            name: "OpDiv".to_string(),
-            operand_width: vec![],
-        },
-    }
-}
+opcode_enum!(
+    Opcode,
+    [
+        OpConstant: [2],
+        OpAdd: [],
+        OpPop: [],
+        OpSub: [],
+        OpMul: [],
+        OpDiv: []
+    ]
+);
 
 pub fn make(op: Opcode, operands: &Vec<usize>) -> Instructions {
     let def = lookup(&op);
