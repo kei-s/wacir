@@ -58,27 +58,51 @@ impl Instructions {
     }
 }
 
-pub enum Opcode {
-    OpConstant,
-    OpAdd,
+// pub enum Opcode {
+//     OpConstant,
+//     OpAdd,
+// }
+//
+// impl Opcode {
+//     pub fn byte(self) -> u8 {
+//         self as u8
+//     }
+//
+//     pub fn from(byte: u8) -> Opcode {
+//         if byte == Opcode::OpConstant.byte() {
+//             return Opcode::OpConstant;
+//         }
+//         if byte == Opcode::OpAdd.byte() {
+//             return Opcode::OpAdd;
+//         }
+//         unreachable!("No such opcode {}", byte)
+//     }
+// }
+macro_rules! opcode_enum {
+    ($name:ident, [ $($var:ident),+ ]) => {
+        #[repr(u8)]
+        pub enum $name {
+            $($var,)+
+        }
+
+        impl $name {
+            pub fn byte(self) -> u8 {
+                self as u8
+            }
+
+            pub fn from(byte: u8) -> $name {
+                $(
+                    if byte == $name::$var.byte() {
+                        return $name::$var;
+                    }
+                )+
+                panic!("No such opcode {}", byte)
+            }
+        }
+    };
 }
 
-impl Opcode {
-    pub fn byte(&self) -> u8 {
-        match self {
-            Opcode::OpConstant => 0,
-            Opcode::OpAdd => 1,
-        }
-    }
-
-    pub fn from(byte: u8) -> Opcode {
-        match byte {
-            0 => Opcode::OpConstant,
-            1 => Opcode::OpAdd,
-            _ => unreachable!("No such opcode {}", byte),
-        }
-    }
-}
+opcode_enum!(Opcode, [OpConstant, OpAdd]);
 
 pub struct Definition {
     pub name: String,
@@ -98,8 +122,8 @@ pub fn lookup(op: &Opcode) -> Definition {
     }
 }
 
-pub fn make(op: &Opcode, operands: &Vec<usize>) -> Instructions {
-    let def = lookup(op);
+pub fn make(op: Opcode, operands: &Vec<usize>) -> Instructions {
+    let def = lookup(&op);
 
     let mut instruction_len = 1;
     for w in &def.operand_width {
@@ -162,7 +186,7 @@ mod tests {
         ];
 
         for (op, operands, expected) in tests {
-            let instruction = make(&op, &operands);
+            let instruction = make(op, &operands);
 
             assert_eq!(instruction, expected);
         }
@@ -171,9 +195,9 @@ mod tests {
     #[test]
     fn test_instruction_string() {
         let instructions = vec![
-            make(&Opcode::OpAdd, &vec![]),
-            make(&Opcode::OpConstant, &vec![2]),
-            make(&Opcode::OpConstant, &vec![65535]),
+            make(Opcode::OpAdd, &vec![]),
+            make(Opcode::OpConstant, &vec![2]),
+            make(Opcode::OpConstant, &vec![65535]),
         ];
 
         let expected = r"0000 OpAdd
@@ -190,8 +214,8 @@ mod tests {
         let tests = vec![(Opcode::OpConstant, vec![65535], 2)];
 
         for (op, operands, bytes_read) in tests {
-            let instruction = make(&op, &operands);
             let def = lookup(&op);
+            let instruction = make(op, &operands);
 
             if let Some((_, ins)) = instruction.0.split_first() {
                 let (operands_read, n) = read_operands(&def, ins);

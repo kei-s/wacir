@@ -26,7 +26,7 @@ impl Compiler {
         }
     }
 
-    pub fn emit(&mut self, op: &Opcode, operands: &Vec<usize>) -> usize {
+    pub fn emit(&mut self, op: Opcode, operands: &Vec<usize>) -> usize {
         let mut ins = make(op, operands);
         let pos = self.add_instruction(&mut ins);
         pos
@@ -85,7 +85,7 @@ impl_compile!(InfixExpression => (self, compiler) {
     self.right.compile(compiler)?;
     match &*self.operator {
         "+" => {
-            compiler.emit(&Opcode::OpAdd, &vec![]);
+            compiler.emit(Opcode::OpAdd, &vec![]);
             Ok(())
         }
         other => Err(format!("unknown operator {}", other))
@@ -95,7 +95,7 @@ impl_compile!(InfixExpression => (self, compiler) {
 impl_compile!(IntegerLiteral => (self, compiler) {
     let integer = Object::Integer(self.value);
     let constant = compiler.add_constant(integer);
-    compiler.emit(&Opcode::OpConstant, &vec![constant]);
+    compiler.emit(Opcode::OpConstant, &vec![constant]);
     Ok(())
 });
 
@@ -118,9 +118,9 @@ mod tests {
             "1 + 2".to_string(),
             vec![1, 2],
             vec![
-                make(&Opcode::OpConstant, &vec![0]),
-                make(&Opcode::OpConstant, &vec![1]),
-                make(&Opcode::OpAdd, &vec![]),
+                make(Opcode::OpConstant, &vec![0]),
+                make(Opcode::OpConstant, &vec![1]),
+                make(Opcode::OpAdd, &vec![]),
             ],
         )];
 
