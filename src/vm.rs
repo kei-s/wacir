@@ -36,24 +36,14 @@ impl VM {
                     let constant = self.constants[const_index as usize].clone();
                     self.push(constant)?;
                 }
-                Opcode::OpAdd => {
-                    let right = self.pop();
-                    let left = self.pop();
-                    match (&right, &left) {
-                        (Object::Integer(right_value), Object::Integer(left_value)) => {
-                            self.push(Object::Integer(right_value + left_value))?;
-                        }
-                        _ => {
-                            return Err(format!(
-                                "unsupported object: right: {}, left: {}",
-                                &right, &left
-                            ))
-                        }
-                    }
+                Opcode::OpAdd | Opcode::OpSub | Opcode::OpMul | Opcode::OpDiv => {
+                    self.execute_binary_operation(op)?;
                 }
                 Opcode::OpPop => {
                     self.pop();
                 }
+                //
+                // _ => todo!(),
             }
             ip += 1;
         }
@@ -80,6 +70,39 @@ impl VM {
         obj
     }
 
+    fn execute_binary_operation(&mut self, op: Opcode) -> Result<(), String> {
+        let right = self.pop();
+        let left = self.pop();
+        match (&left, &right) {
+            (Object::Integer(left_value), Object::Integer(right_value)) => {
+                self.execute_binary_integer_operation(op, left_value, right_value)?;
+            }
+            _ => {
+                return Err(format!(
+                    "unsupported object: right: {}, left: {}",
+                    &right, &left
+                ))
+            }
+        }
+        Ok(())
+    }
+
+    fn execute_binary_integer_operation(
+        &mut self,
+        op: Opcode,
+        left_value: &i64,
+        right_value: &i64,
+    ) -> Result<(), String> {
+        let result = match op {
+            Opcode::OpAdd => left_value + right_value,
+            Opcode::OpSub => left_value - right_value,
+            Opcode::OpMul => left_value * right_value,
+            Opcode::OpDiv => left_value / right_value,
+            _ => return Err(format!("unknown integer oprerator: {:?}", op)),
+        };
+        self.push(Object::Integer(result))
+    }
+
     pub fn stack_top(&self) -> Option<&Object> {
         if self.sp > 0 {
             self.stack.get::<usize>((self.sp - 1).try_into().unwrap())
@@ -100,7 +123,20 @@ mod tests {
 
     #[test]
     fn test_integer_arithmetic() {
-        let tests = vec![("1", 1), ("2", 2), ("1 + 2", 3)];
+        let tests = vec![
+            ("1", 1),
+            ("2", 2),
+            ("1 + 2", 3),
+            ("1 - 2", -1),
+            ("1 * 2", 2),
+            ("4 / 2", 2),
+            ("50 / 2 * 2 + 10 - 5", 55),
+            ("5 + 5 + 5 + 5 - 10", 10),
+            ("2 * 2 * 2 * 2 * 2", 32),
+            ("5 * 2 + 10", 20),
+            ("5 + 2 * 10", 25),
+            ("5 * (2 + 10)", 60),
+        ];
 
         run_vm_tests(tests);
     }

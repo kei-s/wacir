@@ -92,6 +92,18 @@ impl_compile!(InfixExpression => (self, compiler) {
             compiler.emit(Opcode::OpAdd, &vec![]);
             Ok(())
         }
+        "-" => {
+            compiler.emit(Opcode::OpSub, &vec![]);
+            Ok(())
+        }
+        "*" => {
+            compiler.emit(Opcode::OpMul, &vec![]);
+            Ok(())
+        }
+        "/" => {
+            compiler.emit(Opcode::OpDiv, &vec![]);
+            Ok(())
+        }
         other => Err(format!("unknown operator {}", other))
     }
 });
@@ -136,6 +148,36 @@ mod tests {
                     make(Opcode::OpConstant, &vec![0]),
                     make(Opcode::OpPop, &vec![]),
                     make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1 - 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpSub, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "1 * 2",
+                vec![1, 2],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpMul, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "2 / 1",
+                vec![2, 1],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpDiv, &vec![]),
                     make(Opcode::OpPop, &vec![]),
                 ],
             ),

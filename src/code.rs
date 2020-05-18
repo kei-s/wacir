@@ -81,6 +81,7 @@ impl Instructions {
 macro_rules! opcode_enum {
     ($name:ident, [ $($var:ident),+ ]) => {
         #[repr(u8)]
+        #[derive(Debug)]
         pub enum $name {
             $($var,)+
         }
@@ -102,7 +103,7 @@ macro_rules! opcode_enum {
     };
 }
 
-opcode_enum!(Opcode, [OpConstant, OpAdd, OpPop]);
+opcode_enum!(Opcode, [OpConstant, OpAdd, OpPop, OpSub, OpMul, OpDiv]);
 
 pub struct Definition {
     pub name: String,
@@ -121,6 +122,18 @@ pub fn lookup(op: &Opcode) -> Definition {
         },
         Opcode::OpPop => Definition {
             name: "OpPop".to_string(),
+            operand_width: vec![],
+        },
+        Opcode::OpSub => Definition {
+            name: "OpSub".to_string(),
+            operand_width: vec![],
+        },
+        Opcode::OpMul => Definition {
+            name: "OpMul".to_string(),
+            operand_width: vec![],
+        },
+        Opcode::OpDiv => Definition {
+            name: "OpDiv".to_string(),
             operand_width: vec![],
         },
     }
