@@ -53,6 +53,12 @@ impl VM {
                 Opcode::OpEqual | Opcode::OpNotEqual | Opcode::OpGreaterThan => {
                     self.execute_comparison(op)?;
                 }
+                Opcode::OpBang => {
+                    self.execute_bang_operator()?;
+                }
+                Opcode::OpMinus => {
+                    self.execute_minus_operator()?;
+                }
                 //
                 // _ => todo!(),
             }
@@ -149,6 +155,25 @@ impl VM {
         }
     }
 
+    fn execute_bang_operator(&mut self) -> Result<(), String> {
+        let operand = self.pop();
+
+        match operand {
+            TRUE => self.push(FALSE),
+            FALSE => self.push(TRUE),
+            _ => self.push(FALSE),
+        }
+    }
+
+    fn execute_minus_operator(&mut self) -> Result<(), String> {
+        let operand = self.pop();
+        if let Object::Integer(integer) = operand {
+            self.push(Object::Integer(-integer))
+        } else {
+            Err(format!("unsupported type for negation: {}", operand))
+        }
+    }
+
     fn native_bool_to_boolean_object(input: bool) -> Object {
         match input {
             true => TRUE,
@@ -189,6 +214,10 @@ mod tests {
             ("5 * 2 + 10", 20),
             ("5 + 2 * 10", 25),
             ("5 * (2 + 10)", 60),
+            ("-5", -5),
+            ("-10", -10),
+            ("-50 + 100 + -50", 0),
+            ("(5 + 10 * 2 + 15 / 3) * 2 + -10", 50),
         ];
 
         run_vm_tests(tests);
@@ -216,6 +245,12 @@ mod tests {
             ("(1 < 2) == false", false),
             ("(1 > 2) == true", false),
             ("(1 > 2) == false", true),
+            ("!true", false),
+            ("!false", true),
+            ("!5", false),
+            ("!!true", true),
+            ("!!false", false),
+            ("!!5", true),
         ];
         run_vm_tests(tests);
     }

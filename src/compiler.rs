@@ -81,6 +81,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::InfixExpression(exp) => exp.compile(compiler),
         Expression::IntegerLiteral(exp) => exp.compile(compiler),
         Expression::Boolean(exp) => exp.compile(compiler),
+        Expression::PrefixExpression(exp) => exp.compile(compiler),
         _ => todo!("other expressions"),
     }
 });
@@ -120,6 +121,16 @@ impl_compile!(InfixExpression => (self, compiler) {
         }
         other => return Err(format!("unknown operator {}", other))
     }
+    Ok(())
+});
+
+impl_compile!(PrefixExpression => (self, compiler) {
+    self.right.compile(compiler)?;
+    match &*self.operator {
+        "!" => compiler.emit(Opcode::OpBang, &vec![]),
+        "-" => compiler.emit(Opcode::OpMinus, &vec![]),
+        other => return Err(format!("unknown operator {}", other))
+    };
     Ok(())
 });
 
@@ -204,6 +215,15 @@ mod tests {
                     make(Opcode::OpPop, &vec![]),
                 ],
             ),
+            (
+                "-1",
+                vec![1],
+                vec![
+                    make(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpMinus, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
         ];
 
         run_compile_tests(tests);
@@ -279,6 +299,15 @@ mod tests {
                     make(Opcode::OpTrue, &vec![]),
                     make(Opcode::OpFalse, &vec![]),
                     make(Opcode::OpNotEqual, &vec![]),
+                    make(Opcode::OpPop, &vec![]),
+                ],
+            ),
+            (
+                "!true",
+                vec![],
+                vec![
+                    make(Opcode::OpTrue, &vec![]),
+                    make(Opcode::OpBang, &vec![]),
                     make(Opcode::OpPop, &vec![]),
                 ],
             ),

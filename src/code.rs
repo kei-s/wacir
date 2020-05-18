@@ -150,7 +150,9 @@ opcode_enum!(
         OpFalse: [],
         OpEqual: [],
         OpNotEqual: [],
-        OpGreaterThan: []
+        OpGreaterThan: [],
+        OpMinus: [],
+        OpBang: []
     ]
 );
 
