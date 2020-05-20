@@ -156,7 +156,7 @@ opcode_enum!(
     ]
 );
 
-pub fn make(op: Opcode, operands: &Vec<usize>) -> Instructions {
+pub fn make(op: Opcode) -> Instructions {
     let def = lookup(&op);
 
     let mut instruction_len = 1;
@@ -166,6 +166,13 @@ pub fn make(op: Opcode, operands: &Vec<usize>) -> Instructions {
 
     let mut instruction: Vec<u8> = Vec::with_capacity(instruction_len);
     instruction.push(op.byte());
+
+    Instructions(instruction)
+}
+
+pub fn make_with_operands(op: Opcode, operands: &Vec<usize>) -> Instructions {
+    let def = lookup(&op);
+    let mut instruction = make(op).0;
 
     for i in 0..operands.len() {
         let o = operands[i] as u16;
@@ -210,28 +217,35 @@ mod tests {
 
     #[test]
     fn test_make() {
-        let tests = vec![
-            (
+        {
+            let tests = vec![(
                 Opcode::OpConstant,
                 vec![65534],
                 Instructions(vec![0u8, 255u8, 254u8]),
-            ),
-            (Opcode::OpAdd, vec![], Instructions(vec![1u8])),
-        ];
+            )];
 
-        for (op, operands, expected) in tests {
-            let instruction = make(op, &operands);
+            for (op, operands, expected) in tests {
+                let instruction = make_with_operands(op, &operands);
 
-            assert_eq!(instruction, expected);
+                assert_eq!(instruction, expected);
+            }
+        }
+        {
+            let tests = vec![(Opcode::OpAdd, Instructions(vec![1u8]))];
+            for (op, expected) in tests {
+                let instruction = make(op);
+
+                assert_eq!(instruction, expected);
+            }
         }
     }
 
     #[test]
     fn test_instruction_string() {
         let instructions = vec![
-            make(Opcode::OpAdd, &vec![]),
-            make(Opcode::OpConstant, &vec![2]),
-            make(Opcode::OpConstant, &vec![65535]),
+            make(Opcode::OpAdd),
+            make_with_operands(Opcode::OpConstant, &vec![2]),
+            make_with_operands(Opcode::OpConstant, &vec![65535]),
         ];
 
         let expected = r"0000 OpAdd
@@ -249,7 +263,7 @@ mod tests {
 
         for (op, operands, bytes_read) in tests {
             let def = lookup(&op);
-            let instruction = make(op, &operands);
+            let instruction = make_with_operands(op, &operands);
 
             if let Some((_, ins)) = instruction.0.split_first() {
                 let (operands_read, n) = read_operands(&def, ins);

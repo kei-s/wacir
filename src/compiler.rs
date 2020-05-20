@@ -26,13 +26,17 @@ impl Compiler {
         }
     }
 
-    pub fn emit(&mut self, op: Opcode, operands: &Vec<usize>) -> usize {
-        let mut ins = make(op, operands);
-        let pos = self.add_instruction(&mut ins);
-        pos
+    pub fn emit(&mut self, op: Opcode) -> usize {
+        let ins = make(op);
+        self.add_instruction(ins)
     }
 
-    pub fn add_instruction(&mut self, ins: &mut Instructions) -> usize {
+    pub fn emit_with_operands(&mut self, op: Opcode, operands: &Vec<usize>) -> usize {
+        let ins = make_with_operands(op, operands);
+        self.add_instruction(ins)
+    }
+
+    pub fn add_instruction(&mut self, mut ins: Instructions) -> usize {
         let pos_new_instruction = self.instructions.0.len();
         self.instructions.0.append(&mut ins.0);
         pos_new_instruction
@@ -69,7 +73,7 @@ impl_compile!(Statement => (self, compiler) {
     match self {
         Statement::ExpressionStatement(stmt) => {
             stmt.expression.compile(compiler)?;
-            compiler.emit(Opcode::OpPop, &vec![]);
+            compiler.emit(Opcode::OpPop);
             Ok(())
         },
         _ => todo!(),
@@ -90,7 +94,7 @@ impl_compile!(InfixExpression => (self, compiler) {
     if &*self.operator == "<" {
         self.right.compile(compiler)?;
         self.left.compile(compiler)?;
-        compiler.emit(Opcode::OpGreaterThan, &vec![]);
+        compiler.emit(Opcode::OpGreaterThan);
         return Ok(())
     }
 
@@ -99,25 +103,25 @@ impl_compile!(InfixExpression => (self, compiler) {
 
     match &*self.operator {
         "+" => {
-            compiler.emit(Opcode::OpAdd, &vec![]);
+            compiler.emit(Opcode::OpAdd);
         }
         "-" => {
-            compiler.emit(Opcode::OpSub, &vec![]);
+            compiler.emit(Opcode::OpSub);
         }
         "*" => {
-            compiler.emit(Opcode::OpMul, &vec![]);
+            compiler.emit(Opcode::OpMul);
         }
         "/" => {
-            compiler.emit(Opcode::OpDiv, &vec![]);
+            compiler.emit(Opcode::OpDiv);
         }
         ">" => {
-            compiler.emit(Opcode::OpGreaterThan, &vec![]);
+            compiler.emit(Opcode::OpGreaterThan);
         }
         "==" => {
-            compiler.emit(Opcode::OpEqual, &vec![]);
+            compiler.emit(Opcode::OpEqual);
         }
         "!=" => {
-            compiler.emit(Opcode::OpNotEqual, &vec![]);
+            compiler.emit(Opcode::OpNotEqual);
         }
         other => return Err(format!("unknown operator {}", other))
     }
@@ -127,8 +131,8 @@ impl_compile!(InfixExpression => (self, compiler) {
 impl_compile!(PrefixExpression => (self, compiler) {
     self.right.compile(compiler)?;
     match &*self.operator {
-        "!" => compiler.emit(Opcode::OpBang, &vec![]),
-        "-" => compiler.emit(Opcode::OpMinus, &vec![]),
+        "!" => compiler.emit(Opcode::OpBang),
+        "-" => compiler.emit(Opcode::OpMinus),
         other => return Err(format!("unknown operator {}", other))
     };
     Ok(())
@@ -137,14 +141,14 @@ impl_compile!(PrefixExpression => (self, compiler) {
 impl_compile!(IntegerLiteral => (self, compiler) {
     let integer = Object::Integer(self.value);
     let constant = compiler.add_constant(integer);
-    compiler.emit(Opcode::OpConstant, &vec![constant]);
+    compiler.emit_with_operands(Opcode::OpConstant, &vec![constant]);
     Ok(())
 });
 
 impl_compile!(Boolean => (self, compiler) {
     match self.value {
-        true => compiler.emit(Opcode::OpTrue, &vec![]),
-        false => compiler.emit(Opcode::OpFalse, &vec![])
+        true => compiler.emit(Opcode::OpTrue),
+        false => compiler.emit(Opcode::OpFalse)
     };
     Ok(())
 });
@@ -169,59 +173,59 @@ mod tests {
                 "1 + 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpAdd, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpAdd),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1; 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpPop, &vec![]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpPop),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1 - 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpSub, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpSub),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1 * 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpMul, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpMul),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "2 / 1",
                 vec![2, 1],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpDiv, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpDiv),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "-1",
                 vec![1],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpMinus, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make(Opcode::OpMinus),
+                    make(Opcode::OpPop),
                 ],
             ),
         ];
@@ -235,80 +239,80 @@ mod tests {
             (
                 "true",
                 vec![],
-                vec![make(Opcode::OpTrue, &vec![]), make(Opcode::OpPop, &vec![])],
+                vec![make(Opcode::OpTrue), make(Opcode::OpPop)],
             ),
             (
                 "false",
                 vec![],
-                vec![make(Opcode::OpFalse, &vec![]), make(Opcode::OpPop, &vec![])],
+                vec![make(Opcode::OpFalse), make(Opcode::OpPop)],
             ),
             (
                 "1 > 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpGreaterThan, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpGreaterThan),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1 < 2",
                 vec![2, 1],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpGreaterThan, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpGreaterThan),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1 == 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpEqual, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpEqual),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "1 != 2",
                 vec![1, 2],
                 vec![
-                    make(Opcode::OpConstant, &vec![0]),
-                    make(Opcode::OpConstant, &vec![1]),
-                    make(Opcode::OpNotEqual, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make_with_operands(Opcode::OpConstant, &vec![0]),
+                    make_with_operands(Opcode::OpConstant, &vec![1]),
+                    make(Opcode::OpNotEqual),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "true == false",
                 vec![],
                 vec![
-                    make(Opcode::OpTrue, &vec![]),
-                    make(Opcode::OpFalse, &vec![]),
-                    make(Opcode::OpEqual, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make(Opcode::OpTrue),
+                    make(Opcode::OpFalse),
+                    make(Opcode::OpEqual),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "true != false",
                 vec![],
                 vec![
-                    make(Opcode::OpTrue, &vec![]),
-                    make(Opcode::OpFalse, &vec![]),
-                    make(Opcode::OpNotEqual, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make(Opcode::OpTrue),
+                    make(Opcode::OpFalse),
+                    make(Opcode::OpNotEqual),
+                    make(Opcode::OpPop),
                 ],
             ),
             (
                 "!true",
                 vec![],
                 vec![
-                    make(Opcode::OpTrue, &vec![]),
-                    make(Opcode::OpBang, &vec![]),
-                    make(Opcode::OpPop, &vec![]),
+                    make(Opcode::OpTrue),
+                    make(Opcode::OpBang),
+                    make(Opcode::OpPop),
                 ],
             ),
         ];
