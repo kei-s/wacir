@@ -175,9 +175,10 @@ impl VM {
     }
 
     fn native_bool_to_boolean_object(input: bool) -> Object {
-        match input {
-            true => TRUE,
-            false => FALSE,
+        if input {
+            TRUE
+        } else {
+            FALSE
         }
     }
 

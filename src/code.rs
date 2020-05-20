@@ -170,16 +170,15 @@ pub fn make(op: Opcode) -> Instructions {
     Instructions(instruction)
 }
 
-pub fn make_with_operands(op: Opcode, operands: &Vec<usize>) -> Instructions {
+pub fn make_with_operands(op: Opcode, operands: &[usize]) -> Instructions {
     let def = lookup(&op);
     let mut instruction = make(op).0;
 
-    for i in 0..operands.len() {
-        let o = operands[i] as u16;
+    for (i, o) in operands.iter().enumerate() {
         let width = def.operand_width[i];
         match width {
             2 => {
-                let bytes = o.to_be_bytes();
+                let bytes = (*o as u16).to_be_bytes();
                 instruction.extend_from_slice(&bytes);
             }
             _ => unreachable!(),

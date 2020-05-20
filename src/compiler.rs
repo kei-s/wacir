@@ -31,7 +31,7 @@ impl Compiler {
         self.add_instruction(ins)
     }
 
-    pub fn emit_with_operands(&mut self, op: Opcode, operands: &Vec<usize>) -> usize {
+    pub fn emit_with_operands(&mut self, op: Opcode, operands: &[usize]) -> usize {
         let ins = make_with_operands(op, operands);
         self.add_instruction(ins)
     }
@@ -141,15 +141,16 @@ impl_compile!(PrefixExpression => (self, compiler) {
 impl_compile!(IntegerLiteral => (self, compiler) {
     let integer = Object::Integer(self.value);
     let constant = compiler.add_constant(integer);
-    compiler.emit_with_operands(Opcode::OpConstant, &vec![constant]);
+    compiler.emit_with_operands(Opcode::OpConstant, &[constant]);
     Ok(())
 });
 
 impl_compile!(Boolean => (self, compiler) {
-    match self.value {
-        true => compiler.emit(Opcode::OpTrue),
-        false => compiler.emit(Opcode::OpFalse)
-    };
+    if self.value {
+        compiler.emit(Opcode::OpTrue);
+    } else {
+        compiler.emit(Opcode::OpFalse);
+    }
     Ok(())
 });
 
