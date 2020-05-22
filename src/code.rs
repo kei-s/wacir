@@ -104,7 +104,7 @@ pub struct Definition {
 macro_rules! opcode_enum {
     ($opcode:ident, [ $($var:ident: $width:tt),+ ]) => {
         #[repr(u8)]
-        #[derive(Debug)]
+        #[derive(Debug, Clone, Copy, PartialEq)]
         pub enum $opcode {
             $($var,)+
         }
@@ -152,7 +152,9 @@ opcode_enum!(
         OpNotEqual: [],
         OpGreaterThan: [],
         OpMinus: [],
-        OpBang: []
+        OpBang: [],
+        OpJumpNotTruthy: [2],
+        OpJump: [2]
     ]
 );
 

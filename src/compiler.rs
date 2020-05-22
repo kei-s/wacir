@@ -2,9 +2,16 @@ use super::ast::*;
 use super::code::*;
 use super::object::Object;
 
+struct EmittedInstruction {
+    opcode: Opcode,
+    position: usize,
+}
+
 pub struct Compiler {
     instructions: Instructions,
     constants: Vec<Object>,
+    last_instruction: Option<EmittedInstruction>,
+    previous_instruction: Option<EmittedInstruction>,
 }
 
 impl Compiler {
@@ -12,6 +19,8 @@ impl Compiler {
         Compiler {
             instructions: Instructions(vec![]),
             constants: vec![],
+            last_instruction: None,
+            previous_instruction: None,
         }
     }
 
@@ -28,23 +37,64 @@ impl Compiler {
 
     pub fn emit(&mut self, op: Opcode) -> usize {
         let ins = make(op);
-        self.add_instruction(ins)
+        self.emit_ins(op, ins)
     }
 
     pub fn emit_with_operands(&mut self, op: Opcode, operands: &[usize]) -> usize {
         let ins = make_with_operands(op, operands);
-        self.add_instruction(ins)
+        self.emit_ins(op, ins)
     }
 
-    pub fn add_instruction(&mut self, mut ins: Instructions) -> usize {
+    fn emit_ins(&mut self, op: Opcode, ins: Instructions) -> usize {
+        let pos = self.add_instruction(ins);
+        self.set_last_instruction(op, pos);
+        pos
+    }
+
+    fn add_instruction(&mut self, mut ins: Instructions) -> usize {
         let pos_new_instruction = self.instructions.0.len();
         self.instructions.0.append(&mut ins.0);
         pos_new_instruction
     }
 
+    fn set_last_instruction(&mut self, op: Opcode, pos: usize) {
+        let last = Some(EmittedInstruction {
+            opcode: op,
+            position: pos,
+        });
+        self.previous_instruction = std::mem::replace(&mut self.last_instruction, last);
+    }
+
     pub fn add_constant(&mut self, obj: Object) -> usize {
         self.constants.push(obj);
         self.constants.len() - 1
+    }
+
+    pub fn last_instruction_is_pop(&self) -> bool {
+        if let Some(emitted) = &self.last_instruction {
+            emitted.opcode == Opcode::OpPop
+        } else {
+            false
+        }
+    }
+
+    pub fn remove_last_pop(&mut self) {
+        self.instructions
+            .0
+            .truncate(self.last_instruction.as_ref().unwrap().position);
+        self.last_instruction = std::mem::replace(&mut self.previous_instruction, None);
+    }
+
+    pub fn replace_instruction(&mut self, pos: usize, new_instuction: Instructions) {
+        for (i, b) in new_instuction.0.iter().enumerate() {
+            self.instructions.0[pos + i] = *b;
+        }
+    }
+
+    pub fn change_operand(&mut self, op_pos: usize, operand: usize) {
+        let op = Opcode::from(self.instructions.0[op_pos]);
+        let new_instuction = make_with_operands(op, &[operand]);
+        self.replace_instruction(op_pos, new_instuction);
     }
 }
 
@@ -86,6 +136,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::IntegerLiteral(exp) => exp.compile(compiler),
         Expression::Boolean(exp) => exp.compile(compiler),
         Expression::PrefixExpression(exp) => exp.compile(compiler),
+        Expression::IfExpression(exp) => exp.compile(compiler),
         _ => todo!("other expressions"),
     }
 });
@@ -150,6 +201,45 @@ impl_compile!(Boolean => (self, compiler) {
         compiler.emit(Opcode::OpTrue);
     } else {
         compiler.emit(Opcode::OpFalse);
+    }
+    Ok(())
+});
+
+impl_compile!(IfExpression => (self, compiler) {
+    self.condition.compile(compiler)?;
+
+    let jump_not_truthy_pos = compiler.emit_with_operands(Opcode::OpJumpNotTruthy, &[9999]);
+
+    self.consequence.compile(compiler)?;
+
+    if compiler.last_instruction_is_pop() {
+        compiler.remove_last_pop()
+    }
+
+    if let Some(alternative) = &self.alternative {
+        let jump_pos = compiler.emit_with_operands(Opcode::OpJump, &[9999]);
+
+        let after_consequense_pos = compiler.instructions.0.len();
+        compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
+
+        alternative.compile(compiler)?;
+
+        if compiler.last_instruction_is_pop() {
+            compiler.remove_last_pop();
+        }
+
+        let after_alternative_pos = compiler.instructions.0.len();
+        compiler.change_operand(jump_pos, after_alternative_pos);
+    } else {
+        let after_consequense_pos = compiler.instructions.0.len();
+        compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
+    }
+    Ok(())
+});
+
+impl_compile!(BlockStatement => (self, compiler) {
+    for s in &self.statements {
+        s.compile(compiler)?;
     }
     Ok(())
 });
@@ -313,6 +403,54 @@ mod tests {
                 vec![
                     make(Opcode::OpTrue),
                     make(Opcode::OpBang),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let tests = vec![
+            (
+                "if (true) { 10 }; 3333;",
+                vec![10, 3333],
+                vec![
+                    // 0000
+                    make(Opcode::OpTrue),
+                    // 0001
+                    make_with_operands(Opcode::OpJumpNotTruthy, &[7]),
+                    // 0004
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    // 0007
+                    make(Opcode::OpPop),
+                    // 0008
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    // 0011
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "if (true) { 10 } else { 20 }; 3333;",
+                vec![10, 20, 3333],
+                vec![
+                    // 0000
+                    make(Opcode::OpTrue),
+                    // 0001
+                    make_with_operands(Opcode::OpJumpNotTruthy, &[10]),
+                    // 0004
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    // 0007
+                    make_with_operands(Opcode::OpJump, &[13]),
+                    // 0010
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    // 0013
+                    make(Opcode::OpPop),
+                    // 0014
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    // 0017
                     make(Opcode::OpPop),
                 ],
             ),

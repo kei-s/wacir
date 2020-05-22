@@ -60,7 +60,7 @@ impl VM {
                     self.execute_minus_operator()?;
                 }
                 //
-                // _ => todo!(),
+                _ => todo!(),
             }
             ip += 1;
         }
