@@ -6,6 +6,7 @@ use std::convert::TryInto;
 const STACK_SIZE: usize = 2048;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
+const NULL: Object = Object::Null;
 
 pub struct VM {
     constants: Vec<Object>,
@@ -72,9 +73,12 @@ impl VM {
                     ip += 2;
 
                     let condition = self.pop();
-                    if !Self::is_truthy(condition){
+                    if !Self::is_truthy(condition) {
                         ip = pos - 1;
                     }
+                }
+                Opcode::OpNull => {
+                    self.push(NULL)?;
                 }
                 //
                 // _ => todo!(),
@@ -178,6 +182,7 @@ impl VM {
         match operand {
             TRUE => self.push(FALSE),
             FALSE => self.push(TRUE),
+            NULL => self.push(TRUE),
             _ => self.push(FALSE),
         }
     }
@@ -200,10 +205,10 @@ impl VM {
     }
 
     fn is_truthy(obj: Object) -> bool {
-        if let Object::Boolean(boolean) = obj {
-            boolean
-        } else {
-            true
+        match obj {
+            Object::Boolean(boolean) => boolean,
+            Object::Null => false,
+            _ => true,
         }
     }
 
@@ -277,22 +282,30 @@ mod tests {
             ("!!true", true),
             ("!!false", false),
             ("!!5", true),
+            ("!(if (false) { 5; })", true),
         ];
         run_vm_tests(tests);
     }
 
     #[test]
     fn test_conditionals() {
-        let tests = vec![
-            ("if (true) { 10 }", 10),
-            ("if (true) { 10 } else { 20 }", 10),
-            ("if (false) { 10 } else { 20 }", 20),
-            ("if (1) { 10 }", 10),
-            ("if (1 < 2) { 10 }", 10),
-            ("if (1 < 2) { 10 } else { 20 }", 10),
-            ("if (1 > 2) { 10 } else { 20 }", 20),
-        ];
-        run_vm_tests(tests);
+        {
+            let tests = vec![
+                ("if (true) { 10 }", 10),
+                ("if (true) { 10 } else { 20 }", 10),
+                ("if (false) { 10 } else { 20 }", 20),
+                ("if (1) { 10 }", 10),
+                ("if (1 < 2) { 10 }", 10),
+                ("if (1 < 2) { 10 } else { 20 }", 10),
+                ("if (1 > 2) { 10 } else { 20 }", 20),
+                ("if ((if (false) { 10 })) { 10 } else { 20 }", 20),
+            ];
+            run_vm_tests(tests);
+        }
+        {
+            let tests = vec![("if (1 > 2) { 10 }", NULL), ("if (false) { 10 }", NULL)];
+            run_vm_tests(tests);
+        }
     }
 
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
@@ -346,6 +359,15 @@ mod tests {
                 assert_eq!(self, boolean);
             } else {
                 assert!(false, "object is not Boolean. {}", actual)
+            }
+        }
+    }
+
+    impl Expectable for Object {
+        fn assert_eq(&self, actual: &Object) {
+            match self {
+                Object::Null => assert_eq!(self, actual),
+                _ => assert!(false, "Not expectable object: {}", self),
             }
         }
     }

@@ -154,7 +154,8 @@ opcode_enum!(
         OpMinus: [],
         OpBang: [],
         OpJumpNotTruthy: [2],
-        OpJump: [2]
+        OpJump: [2],
+        OpNull: []
     ]
 );
 

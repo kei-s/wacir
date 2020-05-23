@@ -216,24 +216,24 @@ impl_compile!(IfExpression => (self, compiler) {
         compiler.remove_last_pop()
     }
 
+    let jump_pos = compiler.emit_with_operands(Opcode::OpJump, &[9999]);
+
+    let after_consequense_pos = compiler.instructions.0.len();
+    compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
+
     if let Some(alternative) = &self.alternative {
-        let jump_pos = compiler.emit_with_operands(Opcode::OpJump, &[9999]);
-
-        let after_consequense_pos = compiler.instructions.0.len();
-        compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
-
         alternative.compile(compiler)?;
 
         if compiler.last_instruction_is_pop() {
             compiler.remove_last_pop();
         }
-
-        let after_alternative_pos = compiler.instructions.0.len();
-        compiler.change_operand(jump_pos, after_alternative_pos);
     } else {
-        let after_consequense_pos = compiler.instructions.0.len();
-        compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
+        compiler.emit(Opcode::OpNull);
     }
+
+    let after_alternative_pos = compiler.instructions.0.len();
+    compiler.change_operand(jump_pos, after_alternative_pos);
+
     Ok(())
 });
 
@@ -421,10 +421,14 @@ mod tests {
                     // 0000
                     make(Opcode::OpTrue),
                     // 0001
-                    make_with_operands(Opcode::OpJumpNotTruthy, &[7]),
+                    make_with_operands(Opcode::OpJumpNotTruthy, &[10]),
                     // 0004
                     make_with_operands(Opcode::OpConstant, &[0]),
                     // 0007
+                    make_with_operands(Opcode::OpJump, &[11]),
+                    // 0010
+                    make(Opcode::OpNull),
+                    // 0011
                     make(Opcode::OpPop),
                     // 0008
                     make_with_operands(Opcode::OpConstant, &[1]),
