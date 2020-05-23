@@ -155,7 +155,9 @@ opcode_enum!(
         OpBang: [],
         OpJumpNotTruthy: [2],
         OpJump: [2],
-        OpNull: []
+        OpNull: [],
+        OpGetGlobal: [2],
+        OpSetGlobal: [2]
     ]
 );
 

@@ -81,7 +81,7 @@ impl VM {
                     self.push(NULL)?;
                 }
                 //
-                // _ => todo!(),
+                _ => todo!(),
             }
             ip += 1;
         }

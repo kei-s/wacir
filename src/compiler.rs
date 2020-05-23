@@ -126,8 +126,15 @@ impl_compile!(Statement => (self, compiler) {
             compiler.emit(Opcode::OpPop);
             Ok(())
         },
+        Statement::LetStatement(stmt) => {
+            stmt.compile(compiler)
+        }
         _ => todo!(),
     }
+});
+
+impl_compile!(LetStatement => (self, compiler) {
+    self.value.compile(compiler)
 });
 
 impl_compile!(Expression => (self, compiler) {
@@ -460,6 +467,55 @@ mod tests {
             ),
         ];
 
+        run_compile_tests(tests);
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let tests = vec![
+            (
+                r"
+                let one = 1;
+                let two = 2;
+                ",
+                vec![1, 2],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpSetGlobal, &[1]),
+                ],
+            ),
+            (
+                r"
+                let one = 1;
+                one;
+                ",
+                vec![1],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpGetGlobal, &[0]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r"
+                let one = 1;
+                let two = one;
+                two;
+                ",
+                vec![1],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpGetGlobal, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[1]),
+                    make_with_operands(Opcode::OpGetGlobal, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
         run_compile_tests(tests);
     }
 
