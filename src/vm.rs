@@ -59,8 +59,25 @@ impl VM {
                 Opcode::OpMinus => {
                     self.execute_minus_operator()?;
                 }
+                Opcode::OpJump => {
+                    let pos = u16::from_be_bytes(
+                        self.instructions.0[ip + 1..ip + 1 + 2].try_into().unwrap(),
+                    ) as usize;
+                    ip = pos - 1;
+                }
+                Opcode::OpJumpNotTruthy => {
+                    let pos = u16::from_be_bytes(
+                        self.instructions.0[ip + 1..ip + 1 + 2].try_into().unwrap(),
+                    ) as usize;
+                    ip += 2;
+
+                    let condition = self.pop();
+                    if !Self::is_truthy(condition){
+                        ip = pos - 1;
+                    }
+                }
                 //
-                _ => todo!(),
+                // _ => todo!(),
             }
             ip += 1;
         }
@@ -182,6 +199,14 @@ impl VM {
         }
     }
 
+    fn is_truthy(obj: Object) -> bool {
+        if let Object::Boolean(boolean) = obj {
+            boolean
+        } else {
+            true
+        }
+    }
+
     pub fn stack_top(&self) -> Option<&Object> {
         if self.sp > 0 {
             self.stack.get::<usize>((self.sp - 1).try_into().unwrap())
@@ -252,6 +277,20 @@ mod tests {
             ("!!true", true),
             ("!!false", false),
             ("!!5", true),
+        ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_conditionals() {
+        let tests = vec![
+            ("if (true) { 10 }", 10),
+            ("if (true) { 10 } else { 20 }", 10),
+            ("if (false) { 10 } else { 20 }", 20),
+            ("if (1) { 10 }", 10),
+            ("if (1 < 2) { 10 }", 10),
+            ("if (1 < 2) { 10 } else { 20 }", 10),
+            ("if (1 > 2) { 10 } else { 20 }", 20),
         ];
         run_vm_tests(tests);
     }
