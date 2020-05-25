@@ -1,6 +1,9 @@
+mod symbol_table;
+
 use super::ast::*;
 use super::code::*;
 use super::object::Object;
+use symbol_table::*;
 
 struct EmittedInstruction {
     opcode: Opcode,
@@ -12,6 +15,7 @@ pub struct Compiler {
     constants: Vec<Object>,
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
+    symbol_table: SymbolTable,
 }
 
 impl Compiler {
@@ -21,6 +25,7 @@ impl Compiler {
             constants: vec![],
             last_instruction: None,
             previous_instruction: None,
+            symbol_table: new_symbol_table(),
         }
     }
 
@@ -134,7 +139,10 @@ impl_compile!(Statement => (self, compiler) {
 });
 
 impl_compile!(LetStatement => (self, compiler) {
-    self.value.compile(compiler)
+    self.value.compile(compiler)?;
+    let index = compiler.symbol_table.define(&self.name.value).index;
+    compiler.emit_with_operands(Opcode::OpSetGlobal, &[index]);
+    Ok(())
 });
 
 impl_compile!(Expression => (self, compiler) {
@@ -144,7 +152,8 @@ impl_compile!(Expression => (self, compiler) {
         Expression::Boolean(exp) => exp.compile(compiler),
         Expression::PrefixExpression(exp) => exp.compile(compiler),
         Expression::IfExpression(exp) => exp.compile(compiler),
-        _ => todo!("other expressions"),
+        Expression::Identifier(exp) => exp.compile(compiler),
+        _ => todo!("other expressions: {:?}", self),
     }
 });
 
@@ -248,6 +257,14 @@ impl_compile!(BlockStatement => (self, compiler) {
     for s in &self.statements {
         s.compile(compiler)?;
     }
+    Ok(())
+});
+
+impl_compile!(Identifier => (self, compiler) {
+    let index = compiler.symbol_table.resolve(&self.value).expect(
+        &format!("undefined variable: {}", self.value)
+    ).index;
+    compiler.emit_with_operands(Opcode::OpGetGlobal, &[index]);
     Ok(())
 });
 
