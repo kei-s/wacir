@@ -4,6 +4,7 @@ use super::object::*;
 use std::convert::TryInto;
 
 const STACK_SIZE: usize = 2048;
+pub const GLOBALS_SIZE: usize = 65536;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 const NULL: Object = Object::Null;
@@ -14,6 +15,7 @@ pub struct VM {
     stack: Vec<Object>,
     sp: usize,
     pub last_popped_stack_elem: Option<Object>,
+    globals: Vec<Object>,
 }
 
 impl VM {
@@ -24,6 +26,7 @@ impl VM {
             stack: Vec::with_capacity(STACK_SIZE),
             sp: 0,
             last_popped_stack_elem: None,
+            globals: Vec::with_capacity(GLOBALS_SIZE),
         }
     }
 
@@ -61,15 +64,11 @@ impl VM {
                     self.execute_minus_operator()?;
                 }
                 Opcode::OpJump => {
-                    let pos = u16::from_be_bytes(
-                        self.instructions.0[ip + 1..ip + 1 + 2].try_into().unwrap(),
-                    ) as usize;
+                    let pos = read_uint16(&self.instructions, ip + 1) as usize;
                     ip = pos - 1;
                 }
                 Opcode::OpJumpNotTruthy => {
-                    let pos = u16::from_be_bytes(
-                        self.instructions.0[ip + 1..ip + 1 + 2].try_into().unwrap(),
-                    ) as usize;
+                    let pos = read_uint16(&self.instructions, ip + 1) as usize;
                     ip += 2;
 
                     let condition = self.pop();
@@ -80,8 +79,25 @@ impl VM {
                 Opcode::OpNull => {
                     self.push(NULL)?;
                 }
+                Opcode::OpSetGlobal => {
+                    let global_index = read_uint16(&self.instructions, ip + 1) as usize;
+                    ip += 2;
+                    let popped = self.pop();
+                    if self.globals.len() == global_index {
+                        self.globals.push(popped);
+                    } else {
+                        self.globals[global_index] = popped;
+                    }
+                }
+                Opcode::OpGetGlobal => {
+                    let global_index = read_uint16(&self.instructions, ip + 1) as usize;
+                    ip += 2;
+                    // TODO: clone() どうにかなるか
+                    let obj = (&self.globals[global_index]).clone();
+                    self.push(obj)?;
+                }
                 //
-                _ => todo!(),
+                // _ => todo!("unknown Opcode: {:?}", op),
             }
             ip += 1;
         }
@@ -306,6 +322,16 @@ mod tests {
             let tests = vec![("if (1 > 2) { 10 }", NULL), ("if (false) { 10 }", NULL)];
             run_vm_tests(tests);
         }
+    }
+
+    #[test]
+    fn test_global_let_statements() {
+        let tests = vec![
+            ("let one = 1; one", 1),
+            ("let one = 1; let two = 2; one + two", 3),
+            ("let one = 1; let two = one + one; one + two", 3),
+        ];
+        run_vm_tests(tests);
     }
 
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
