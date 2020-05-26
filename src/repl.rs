@@ -5,6 +5,10 @@ use std::io::prelude::Write;
 pub fn start() {
     const PROMPT: &str = ">> ";
 
+    let mut constants = compiler::new_constants();
+    let mut globals = vm::new_globals_store();
+    let mut symbol_table = compiler::new_symbol_table();
+
     loop {
         print!("{}", PROMPT);
         io::stdout().flush().unwrap();
@@ -21,13 +25,13 @@ pub fn start() {
             continue;
         }
 
-        let mut comp = compiler::Compiler::new();
+        let mut comp = compiler::Compiler::new_with_state(&mut symbol_table, &mut constants);
         if let Err(err) = comp.compile(program) {
             println!("Woops! Compilation failed:\n {}", err);
             continue;
         }
 
-        let mut machine = vm::VM::new(comp.bytecode());
+        let mut machine = vm::VM::new_with_globals_store(comp.bytecode(), &mut globals);
         if let Err(err) = machine.run() {
             println!("Woops! Executing bytecode failed:\n {}", err);
             continue;

@@ -3,29 +3,44 @@ mod symbol_table;
 use super::ast::*;
 use super::code::*;
 use super::object::Object;
+pub use symbol_table::new_symbol_table;
 use symbol_table::*;
+
+pub fn new_constants() -> Vec<Object> {
+    Vec::new()
+}
 
 struct EmittedInstruction {
     opcode: Opcode,
     position: usize,
 }
 
-pub struct Compiler {
+pub struct Compiler<'a> {
     instructions: Instructions,
-    constants: Vec<Object>,
+    constants: &'a mut Vec<Object>,
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
-    symbol_table: SymbolTable,
+    symbol_table: &'a mut SymbolTable,
 }
 
-impl Compiler {
-    pub fn new() -> Compiler {
+impl<'a> Compiler<'a> {
+    // pub fn new() -> Compiler {
+    //     Compiler {
+    //         instructions: Instructions(vec![]),
+    //         constants: vec![],
+    //         last_instruction: None,
+    //         previous_instruction: None,
+    //         symbol_table: new_symbol_table(),
+    //     }
+    // }
+
+    pub fn new_with_state(s: &'a mut SymbolTable, constants: &'a mut Vec<Object>) -> Compiler<'a> {
         Compiler {
             instructions: Instructions(vec![]),
-            constants: vec![],
+            constants: constants,
             last_instruction: None,
             previous_instruction: None,
-            symbol_table: new_symbol_table(),
+            symbol_table: s,
         }
     }
 
@@ -33,7 +48,7 @@ impl Compiler {
         program.compile(self)
     }
 
-    pub fn bytecode(self) -> ByteCode {
+    pub fn bytecode(self) -> ByteCode<'a> {
         ByteCode {
             instructions: self.instructions,
             constants: self.constants,
@@ -268,9 +283,9 @@ impl_compile!(Identifier => (self, compiler) {
     Ok(())
 });
 
-pub struct ByteCode {
+pub struct ByteCode<'a> {
     pub instructions: Instructions,
-    pub constants: Vec<Object>,
+    pub constants: &'a mut Vec<Object>,
 }
 
 #[cfg(test)]
@@ -540,7 +555,9 @@ mod tests {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
 
-            let mut compiler = Compiler::new();
+            let mut symbol_table = new_symbol_table();
+            let mut constants = Vec::new();
+            let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
             if let Err(err) = compiler.compile(program) {
                 assert!(false, "compile error. {}", err)
             }
@@ -548,7 +565,7 @@ mod tests {
             let bytecode = compiler.bytecode();
 
             test_instructions(expected_instructions, bytecode.instructions);
-            test_constants(expected_constants, bytecode.constants);
+            test_constants(expected_constants, bytecode.constants.to_vec());
         }
     }
 

@@ -9,24 +9,39 @@ const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 const NULL: Object = Object::Null;
 
-pub struct VM {
-    constants: Vec<Object>,
+pub fn new_globals_store() -> Vec<Object> {
+    Vec::with_capacity(GLOBALS_SIZE)
+}
+
+pub struct VM<'a> {
+    constants: &'a mut Vec<Object>,
     instructions: Instructions,
     stack: Vec<Object>,
     sp: usize,
     pub last_popped_stack_elem: Option<Object>,
-    globals: Vec<Object>,
+    globals: &'a mut Vec<Object>,
 }
 
-impl VM {
-    pub fn new(bytecode: ByteCode) -> VM {
+impl<'a> VM<'a> {
+    // pub fn new(bytecode: ByteCode) -> VM {
+    //     VM {
+    //         constants: bytecode.constants,
+    //         instructions: bytecode.instructions,
+    //         stack: Vec::with_capacity(STACK_SIZE),
+    //         sp: 0,
+    //         last_popped_stack_elem: None,
+    //         globals: Vec::with_capacity(GLOBALS_SIZE),
+    //     }
+    // }
+
+    pub fn new_with_globals_store(bytecode: ByteCode<'a>, s: &'a mut Vec<Object>) -> VM<'a> {
         VM {
             constants: bytecode.constants,
             instructions: bytecode.instructions,
             stack: Vec::with_capacity(STACK_SIZE),
             sp: 0,
             last_popped_stack_elem: None,
-            globals: Vec::with_capacity(GLOBALS_SIZE),
+            globals: s,
         }
     }
 
@@ -337,12 +352,15 @@ mod tests {
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
         for (input, expected) in tests {
             let program = parse(input.to_string());
-            let mut comp = Compiler::new();
+            let mut symbol_table = new_symbol_table();
+            let mut constants = new_constants();
+            let mut comp = Compiler::new_with_state(&mut symbol_table, &mut constants);
             if let Err(err) = comp.compile(program) {
                 assert!(false, "compile error: {}", err);
             }
 
-            let mut vm = VM::new(comp.bytecode());
+            let mut globals = new_globals_store();
+            let mut vm = VM::new_with_globals_store(comp.bytecode(), &mut globals);
             if let Err(err) = vm.run() {
                 assert!(false, "vm error: {}", err);
             }
