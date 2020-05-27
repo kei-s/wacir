@@ -168,6 +168,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::PrefixExpression(exp) => exp.compile(compiler),
         Expression::IfExpression(exp) => exp.compile(compiler),
         Expression::Identifier(exp) => exp.compile(compiler),
+        Expression::StringLiteral(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -280,6 +281,13 @@ impl_compile!(Identifier => (self, compiler) {
         &format!("undefined variable: {}", self.value)
     ).index;
     compiler.emit_with_operands(Opcode::OpGetGlobal, &[index]);
+    Ok(())
+});
+
+impl_compile!(StringLiteral => (self, compiler) {
+    let string = Object::String(self.value.clone());
+    let constant = compiler.add_constant(string);
+    compiler.emit_with_operands(Opcode::OpConstant, &[constant]);
     Ok(())
 });
 

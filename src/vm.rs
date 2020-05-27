@@ -146,6 +146,9 @@ impl<'a> VM<'a> {
             (Object::Integer(left_value), Object::Integer(right_value)) => {
                 self.execute_binary_integer_operation(op, *left_value, *right_value)?;
             }
+            (Object::String(left_value), Object::String(right_value)) => {
+                self.execute_binary_string_operation(op, left_value, right_value)?;
+            }
             _ => {
                 return Err(format!(
                     "unsupported object: right: {}, left: {}",
@@ -170,6 +173,18 @@ impl<'a> VM<'a> {
             _ => return Err(format!("unknown integer oprerator: {:?}", op)),
         };
         self.push(Object::Integer(result))
+    }
+
+    fn execute_binary_string_operation(
+        &mut self,
+        op: Opcode,
+        left_value: &str,
+        right_value: &str,
+    ) -> Result<(), String> {
+        if op != Opcode::OpAdd {
+            return Err(format!("unknown string operator: {:?}", op));
+        }
+        self.push(Object::String(left_value.to_string() + right_value))
     }
 
     fn execute_comparison(&mut self, op: Opcode) -> Result<(), String> {
@@ -345,6 +360,16 @@ mod tests {
             ("let one = 1; one", 1),
             ("let one = 1; let two = 2; one + two", 3),
             ("let one = 1; let two = one + one; one + two", 3),
+        ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_string_expressions() {
+        let tests = vec![
+            (r#""monkey""#, "monkey"),
+            (r#""mon" + "key""#, "monkey"),
+            (r#""mon" + "key" + "banana""#, "monkeybanana"),
         ];
         run_vm_tests(tests);
     }
