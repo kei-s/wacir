@@ -294,6 +294,7 @@ mod tests {
     use super::super::code::*;
     use super::super::lexer::Lexer;
     use super::super::parser::Parser;
+    use super::super::test_utils::*;
     use super::*;
 
     #[test]
@@ -551,7 +552,33 @@ mod tests {
         run_compile_tests(tests);
     }
 
-    fn run_compile_tests(tests: Vec<(&str, Vec<i64>, Vec<Instructions>)>) {
+    #[test]
+    fn test_string_expressions() {
+        let tests = vec![
+            (
+                r#""monkey""#,
+                vec!["monkey"],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#""mon" + "key""#,
+                vec!["mon", "key"],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpAdd),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests)
+    }
+
+    fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
 
@@ -580,19 +607,11 @@ mod tests {
         assert_eq!(concated, actual);
     }
 
-    fn test_constants(expected: Vec<i64>, actual: Vec<Object>) {
+    fn test_constants<T: Expectable>(expected: Vec<T>, actual: Vec<Object>) {
         assert_eq!(expected.len(), actual.len());
 
         for (constant, object) in expected.iter().zip(actual.iter()) {
-            test_integer_object(constant, object)
-        }
-    }
-
-    fn test_integer_object(expected: &i64, actual: &Object) {
-        if let Object::Integer(integer) = actual {
-            assert_eq!(expected, integer);
-        } else {
-            assert!(false, "object is not Integer. {}", actual)
+            test_expected_object(constant, object)
         }
     }
 }

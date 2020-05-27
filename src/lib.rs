@@ -6,7 +6,9 @@ mod lexer;
 mod object;
 mod parser;
 pub mod repl;
+#[cfg(test)]
+mod test_utils;
 mod token;
-mod vm;
 #[macro_use]
 mod utils;
+mod vm;
