@@ -169,6 +169,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::IfExpression(exp) => exp.compile(compiler),
         Expression::Identifier(exp) => exp.compile(compiler),
         Expression::StringLiteral(exp) => exp.compile(compiler),
+        Expression::ArrayLiteral(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -288,6 +289,14 @@ impl_compile!(StringLiteral => (self, compiler) {
     let string = Object::String(self.value.clone());
     let constant = compiler.add_constant(string);
     compiler.emit_with_operands(Opcode::OpConstant, &[constant]);
+    Ok(())
+});
+
+impl_compile!(ArrayLiteral => (self, compiler) {
+    for el in &self.elements {
+        el.compile(compiler)?;
+    }
+    compiler.emit_with_operands(Opcode::OpArray, &[self.elements.len()]);
     Ok(())
 });
 
@@ -583,6 +592,49 @@ mod tests {
             ),
         ];
 
+        run_compile_tests(tests)
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let tests = vec![
+            (
+                "[]",
+                vec![],
+                vec![
+                    make_with_operands(Opcode::OpArray, &[0]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "[1, 2, 3]",
+                vec![1, 2, 3],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpArray, &[3]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "[1 + 2, 3 - 4, 5 * 6]",
+                vec![1, 2, 3, 4, 5, 6],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpAdd),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make(Opcode::OpSub),
+                    make_with_operands(Opcode::OpConstant, &[4]),
+                    make_with_operands(Opcode::OpConstant, &[5]),
+                    make(Opcode::OpMul),
+                    make_with_operands(Opcode::OpArray, &[3]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
         run_compile_tests(tests)
     }
 

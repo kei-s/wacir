@@ -111,6 +111,13 @@ impl<'a> VM<'a> {
                     let obj = (&self.globals[global_index]).clone();
                     self.push(obj)?;
                 }
+                Opcode::OpArray => {
+                    let num_elements = read_uint16(&self.instructions, ip + 1) as usize;
+                    ip += 2;
+                    let array = self.build_array(self.sp - num_elements, self.sp);
+                    self.sp = self.sp - num_elements;
+                    self.push(array)?;
+                }
                 //
                 // _ => todo!("unknown Opcode: {:?}", op),
             }
@@ -242,6 +249,11 @@ impl<'a> VM<'a> {
         }
     }
 
+    fn build_array(&mut self, start_index: usize, end_index: usize) -> Object {
+        let elements = self.stack.drain(start_index..end_index).collect();
+        Object::Array(Array { elements })
+    }
+
     fn native_bool_to_boolean_object(input: bool) -> Object {
         if input {
             TRUE
@@ -370,6 +382,16 @@ mod tests {
             (r#""monkey""#, "monkey"),
             (r#""mon" + "key""#, "monkey"),
             (r#""mon" + "key" + "banana""#, "monkeybanana"),
+        ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_array_literals() {
+        let tests = vec![
+            ("[]", vec![]),
+            ("[1, 2, 3]", vec![1, 2, 3]),
+            ("[1 + 2, 3 * 4, 5 + 6]", vec![3, 12, 11]),
         ];
         run_vm_tests(tests);
     }

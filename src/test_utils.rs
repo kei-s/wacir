@@ -46,3 +46,16 @@ impl Expectable for &str {
         }
     }
 }
+
+impl<T: Expectable> Expectable for Vec<T> {
+    fn assert_eq(&self, actual: &Object) {
+        if let Object::Array(array) = actual {
+            assert_eq!(self.len(), array.elements.len());
+            for (expected_e, actual_e) in self.iter().zip(array.elements.iter()) {
+                expected_e.assert_eq(actual_e);
+            }
+        } else {
+            assert!(false, "object is not Array. {}", actual)
+        }
+    }
+}
