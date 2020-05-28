@@ -158,7 +158,8 @@ opcode_enum!(
         OpNull: [],
         OpGetGlobal: [2],
         OpSetGlobal: [2],
-        OpArray: [2]
+        OpArray: [2],
+        OpHash: [2]
     ]
 );
 

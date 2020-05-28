@@ -170,6 +170,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::Identifier(exp) => exp.compile(compiler),
         Expression::StringLiteral(exp) => exp.compile(compiler),
         Expression::ArrayLiteral(exp) => exp.compile(compiler),
+        Expression::HashLiteral(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -297,6 +298,15 @@ impl_compile!(ArrayLiteral => (self, compiler) {
         el.compile(compiler)?;
     }
     compiler.emit_with_operands(Opcode::OpArray, &[self.elements.len()]);
+    Ok(())
+});
+
+impl_compile!(HashLiteral => (self, compiler) {
+    for (key, value) in &self.pairs {
+        key.compile(compiler)?;
+        value.compile(compiler)?;
+    }
+    compiler.emit_with_operands(Opcode::OpHash, &[self.pairs.len() * 2]);
     Ok(())
 });
 
@@ -631,6 +641,51 @@ mod tests {
                     make_with_operands(Opcode::OpConstant, &[5]),
                     make(Opcode::OpMul),
                     make_with_operands(Opcode::OpArray, &[3]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+        run_compile_tests(tests)
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let tests = vec![
+            (
+                "{}",
+                vec![],
+                vec![
+                    make_with_operands(Opcode::OpHash, &[0]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "{1: 2, 3: 4, 5: 6}",
+                vec![1, 2, 3, 4, 5, 6],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make_with_operands(Opcode::OpConstant, &[4]),
+                    make_with_operands(Opcode::OpConstant, &[5]),
+                    make_with_operands(Opcode::OpHash, &[6]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "{1: 2 + 3, 4: 5 * 6}",
+                vec![1, 2, 3, 4, 5, 6],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpAdd),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make_with_operands(Opcode::OpConstant, &[4]),
+                    make_with_operands(Opcode::OpConstant, &[5]),
+                    make(Opcode::OpMul),
+                    make_with_operands(Opcode::OpHash, &[4]),
                     make(Opcode::OpPop),
                 ],
             ),

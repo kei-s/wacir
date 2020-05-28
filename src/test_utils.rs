@@ -1,4 +1,6 @@
+use super::object::hash::HashKey;
 use super::object::Object;
+use std::collections::HashMap;
 
 pub fn test_expected_object<T: Expectable>(expected: &T, actual: &Object) {
     expected.assert_eq(actual);
@@ -56,6 +58,23 @@ impl<T: Expectable> Expectable for Vec<T> {
             }
         } else {
             assert!(false, "object is not Array. {}", actual)
+        }
+    }
+}
+
+impl<T: Expectable> Expectable for HashMap<HashKey, T> {
+    fn assert_eq(&self, actual: &Object) {
+        if let Object::Hash(hash) = actual {
+            assert_eq!(self.len(), hash.pairs.len());
+            for (expected_key, expected_value) in self {
+                let pair = hash
+                    .pairs
+                    .get(expected_key)
+                    .expect("no pair for given key in Pairs");
+                test_expected_object(expected_value, &pair.value);
+            }
+        } else {
+            assert!(false, "object is not Hash. {}", actual)
         }
     }
 }

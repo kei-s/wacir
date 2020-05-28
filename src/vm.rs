@@ -1,6 +1,9 @@
 use super::code::*;
 use super::compiler::*;
-use super::object::*;
+use super::object;
+use super::object::hash::hash_key_of;
+use super::object::Object;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 const STACK_SIZE: usize = 2048;
@@ -115,8 +118,15 @@ impl<'a> VM<'a> {
                     let num_elements = read_uint16(&self.instructions, ip + 1) as usize;
                     ip += 2;
                     let array = self.build_array(self.sp - num_elements, self.sp);
-                    self.sp = self.sp - num_elements;
+                    self.sp -= num_elements;
                     self.push(array)?;
+                }
+                Opcode::OpHash => {
+                    let num_elements = read_uint16(&self.instructions, ip + 1) as usize;
+                    ip += 2;
+                    let hash = self.build_hash(self.sp - num_elements, self.sp)?;
+                    self.sp -= num_elements;
+                    self.push(hash)?;
                 }
                 //
                 // _ => todo!("unknown Opcode: {:?}", op),
@@ -251,7 +261,19 @@ impl<'a> VM<'a> {
 
     fn build_array(&mut self, start_index: usize, end_index: usize) -> Object {
         let elements = self.stack.drain(start_index..end_index).collect();
-        Object::Array(Array { elements })
+        Object::Array(object::Array { elements })
+    }
+
+    fn build_hash(&mut self, start_index: usize, end_index: usize) -> Result<Object, String> {
+        let mut drain = self.stack.drain(start_index..end_index);
+
+        let mut pairs = HashMap::new();
+        while let (Some(key), Some(value)) = (drain.next(), drain.next()) {
+            let hash_key = hash_key_of(&key)?;
+            let pair = object::HashPair { key, value };
+            pairs.insert(hash_key, pair);
+        }
+        Ok(Object::Hash(object::Hash { pairs }))
     }
 
     fn native_bool_to_boolean_object(input: bool) -> Object {
@@ -284,9 +306,11 @@ mod tests {
     use super::super::ast::Program;
     use super::super::compiler::Compiler;
     use super::super::lexer::Lexer;
+    use super::super::object::hash::hash_key_of;
     use super::super::parser::Parser;
     use super::super::test_utils::*;
     use super::*;
+    use std::collections::HashMap;
 
     #[test]
     fn test_integer_arithmetic() {
@@ -393,6 +417,32 @@ mod tests {
             ("[1, 2, 3]", vec![1, 2, 3]),
             ("[1 + 2, 3 * 4, 5 + 6]", vec![3, 12, 11]),
         ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_hash_literals() {
+        let tests = vec![
+            ("{}", vec![]),
+            (
+                "{1: 2, 2: 3}",
+                vec![
+                    (hash_key_of(&Object::Integer(1)).unwrap(), 2),
+                    (hash_key_of(&Object::Integer(2)).unwrap(), 3),
+                ],
+            ),
+            (
+                "{1 + 1: 2 * 2, 3 + 3: 4 * 4}",
+                vec![
+                    (hash_key_of(&Object::Integer(2)).unwrap(), 4),
+                    (hash_key_of(&Object::Integer(6)).unwrap(), 16),
+                ],
+            ),
+        ]
+        .into_iter()
+        .map(|(input, expected)| (input, expected.into_iter().collect::<HashMap<_, _>>()))
+        .collect();
+
         run_vm_tests(tests);
     }
 
