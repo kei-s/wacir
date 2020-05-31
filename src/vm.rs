@@ -128,6 +128,11 @@ impl<'a> VM<'a> {
                     self.sp -= num_elements;
                     self.push(hash)?;
                 }
+                Opcode::OpIndex => {
+                    let index = self.pop();
+                    let left = self.pop();
+                    self.execute_index_expression(left, index)?;
+                }
                 //
                 // _ => todo!("unknown Opcode: {:?}", op),
             }
@@ -274,6 +279,31 @@ impl<'a> VM<'a> {
             pairs.insert(hash_key, pair);
         }
         Ok(Object::Hash(object::Hash { pairs }))
+    }
+
+    fn execute_index_expression(&mut self, left: Object, index: Object) -> Result<(), String> {
+        match (left, index) {
+            (Object::Array(array), Object::Integer(integer)) => {
+                self.execute_array_index(array, integer)
+            }
+            (Object::Hash(hash), i) => self.execute_hash_index(hash, i),
+            (l, _) => Err(format!("index operator not supported: {}", l)),
+        }
+    }
+
+    fn execute_array_index(&mut self, array: object::Array, index: i64) -> Result<(), String> {
+        if index < 0 || index as usize + 1 > array.elements.len() {
+            return self.push(NULL);
+        }
+        self.push(array.elements[index as usize].clone())
+    }
+
+    fn execute_hash_index(&mut self, hash: object::Hash, index: Object) -> Result<(), String> {
+        let key = hash_key_of(&index)?;
+        self.push(match hash.pairs.get(&key) {
+            Some(pair) => pair.value.clone(),
+            None => NULL,
+        })
     }
 
     fn native_bool_to_boolean_object(input: bool) -> Object {
@@ -444,6 +474,30 @@ mod tests {
         .collect();
 
         run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_index_expressions() {
+        {
+            let tests = vec![
+                ("[1, 2, 3][1]", 2),
+                ("[1, 2, 3][0 + 2]", 3),
+                ("[[1, 1, 1]][0][0]", 1),
+                ("{1: 1, 2: 2}[1]", 1),
+                ("{1: 1, 2: 2}[2]", 2),
+            ];
+            run_vm_tests(tests);
+        }
+        {
+            let tests = vec![
+                ("[][0]", NULL),
+                ("[1, 2, 3][99]", NULL),
+                ("[1][-1]", NULL),
+                ("{1: 1}[0]", NULL),
+                ("{}[0]", NULL),
+            ];
+            run_vm_tests(tests);
+        }
     }
 
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {

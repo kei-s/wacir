@@ -171,6 +171,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::StringLiteral(exp) => exp.compile(compiler),
         Expression::ArrayLiteral(exp) => exp.compile(compiler),
         Expression::HashLiteral(exp) => exp.compile(compiler),
+        Expression::IndexExpression(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -307,6 +308,13 @@ impl_compile!(HashLiteral => (self, compiler) {
         value.compile(compiler)?;
     }
     compiler.emit_with_operands(Opcode::OpHash, &[self.pairs.len() * 2]);
+    Ok(())
+});
+
+impl_compile!(IndexExpression => (self, compiler) {
+    self.left.compile(compiler)?;
+    self.index.compile(compiler)?;
+    compiler.emit(Opcode::OpIndex);
     Ok(())
 });
 
@@ -686,6 +694,42 @@ mod tests {
                     make_with_operands(Opcode::OpConstant, &[5]),
                     make(Opcode::OpMul),
                     make_with_operands(Opcode::OpHash, &[4]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+        run_compile_tests(tests)
+    }
+
+    #[test]
+    fn test_index_expresssions() {
+        let tests = vec![
+            (
+                "[1, 2, 3][1 + 1]",
+                vec![1, 2, 3, 1, 1],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpArray, &[3]),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make_with_operands(Opcode::OpConstant, &[4]),
+                    make(Opcode::OpAdd),
+                    make(Opcode::OpIndex),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "{1: 2}[2 - 1]",
+                vec![1, 2, 2, 1],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpHash, &[2]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make(Opcode::OpSub),
+                    make(Opcode::OpIndex),
                     make(Opcode::OpPop),
                 ],
             ),
