@@ -134,7 +134,7 @@ impl<'a> VM<'a> {
                     self.execute_index_expression(left, index)?;
                 }
                 //
-                // _ => todo!("unknown Opcode: {:?}", op),
+                _ => todo!("unknown Opcode: {:?}", op),
             }
             ip += 1;
         }

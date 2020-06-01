@@ -1,6 +1,6 @@
 use std::convert::TryInto;
 
-#[derive(PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Instructions(pub Vec<u8>);
 
 pub trait ConcatInstructions {
@@ -160,7 +160,10 @@ opcode_enum!(
         OpSetGlobal: [2],
         OpArray: [2],
         OpHash: [2],
-        OpIndex: []
+        OpIndex: [],
+        OpCall: [],
+        OpReturnValue: [],
+        OpReturn: []
     ]
 );
 

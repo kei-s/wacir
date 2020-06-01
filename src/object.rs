@@ -1,5 +1,6 @@
 use self::hash::HashKey;
 use super::ast::{BlockStatement, Expression, Identifier};
+use super::code::Instructions;
 use super::enum_with_fmt;
 use super::evaluator::Environment;
 use std::cell::RefCell;
@@ -14,6 +15,7 @@ enum_with_fmt!(
         Boolean(bool),
         ReturnValue(Box<Object>),
         Function(Function),
+        CompiledFunction(CompiledFunction),
         Builtin(Builtin),
         Array(Array),
         Hash(Hash),
@@ -46,6 +48,17 @@ impl fmt::Display for Function {
                 .join(", "),
             self.body
         )
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledFunction {
+    pub instructions: Instructions,
+}
+
+impl fmt::Display for CompiledFunction {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "CompiledFunction[{}]", self)
     }
 }
 
