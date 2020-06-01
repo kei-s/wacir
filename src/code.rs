@@ -4,14 +4,14 @@ use std::convert::TryInto;
 pub struct Instructions(pub Vec<u8>);
 
 pub trait ConcatInstructions {
-    fn concat(self) -> Instructions;
+    fn concat(&self) -> Instructions;
 }
 
 impl ConcatInstructions for Vec<Instructions> {
-    fn concat(self) -> Instructions {
+    fn concat(&self) -> Instructions {
         Instructions(
             self.into_iter()
-                .map(|ins| ins.0)
+                .map(|ins| ins.0.clone())
                 .collect::<Vec<Vec<u8>>>()
                 .concat(),
         )

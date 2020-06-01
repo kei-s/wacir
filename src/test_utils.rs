@@ -1,9 +1,20 @@
+use super::code::{ConcatInstructions, Instructions};
 use super::object::hash::HashKey;
 use super::object::Object;
 use std::collections::HashMap;
 
+pub fn test_instructions(expected: &Vec<Instructions>, actual: &Instructions) {
+    let concated = expected.concat();
+    assert_eq!(&concated, actual);
+}
+
 pub fn test_expected_object<T: Expectable>(expected: &T, actual: &Object) {
     expected.assert_eq(actual);
+}
+
+pub enum Expect {
+    Integer(i64),
+    Instructions(Vec<Instructions>),
 }
 
 pub trait Expectable {
@@ -75,6 +86,25 @@ impl<T: Expectable> Expectable for HashMap<HashKey, T> {
             }
         } else {
             assert!(false, "object is not Hash. {}", actual)
+        }
+    }
+}
+
+impl Expectable for Vec<Instructions> {
+    fn assert_eq(&self, actual: &Object) {
+        if let Object::CompiledFunction(func) = actual {
+            test_instructions(self, &func.instructions)
+        } else {
+            assert!(false, "object is not CompiledFunction. {}", actual)
+        }
+    }
+}
+
+impl Expectable for Expect {
+    fn assert_eq(&self, actual: &Object) {
+        match self {
+            Expect::Integer(integer) => integer.assert_eq(actual),
+            Expect::Instructions(instructions) => instructions.assert_eq(actual),
         }
     }
 }

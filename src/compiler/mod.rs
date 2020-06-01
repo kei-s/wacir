@@ -737,6 +737,28 @@ mod tests {
         run_compile_tests(tests)
     }
 
+    #[test]
+    fn test_functions() {
+        let tests = vec![(
+            "fn() { return 5 + 10 }",
+            vec![
+                Expect::Integer(5),
+                Expect::Integer(10),
+                Expect::Instructions(vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpAdd),
+                    make(Opcode::OpReturnValue),
+                ]),
+            ],
+            vec![
+                make_with_operands(Opcode::OpConstant, &[2]),
+                make(Opcode::OpPop),
+            ],
+        )];
+        run_compile_tests(tests)
+    }
+
     fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
@@ -750,7 +772,7 @@ mod tests {
 
             let bytecode = compiler.bytecode();
 
-            test_instructions(expected_instructions, bytecode.instructions);
+            test_instructions(&expected_instructions, &bytecode.instructions);
             test_constants(expected_constants, bytecode.constants.to_vec());
         }
     }
@@ -759,11 +781,6 @@ mod tests {
         let l = Lexer::new(&input);
         let mut p = Parser::new(l);
         p.parse_program()
-    }
-
-    fn test_instructions(expected: Vec<Instructions>, actual: Instructions) {
-        let concated = expected.concat();
-        assert_eq!(concated, actual);
     }
 
     fn test_constants<T: Expectable>(expected: Vec<T>, actual: Vec<Object>) {
