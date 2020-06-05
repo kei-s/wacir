@@ -7,7 +7,7 @@ pub use symbol_table::new_symbol_table;
 use symbol_table::*;
 
 pub fn new_constants() -> Vec<Object> {
-    Vec::new()
+    vec![]
 }
 
 struct EmittedInstruction {
@@ -15,32 +15,31 @@ struct EmittedInstruction {
     position: usize,
 }
 
-pub struct Compiler<'a> {
+struct CompilationScope {
     instructions: Instructions,
-    constants: &'a mut Vec<Object>,
     last_instruction: Option<EmittedInstruction>,
     previous_instruction: Option<EmittedInstruction>,
+}
+
+pub struct Compiler<'a> {
+    constants: &'a mut Vec<Object>,
     symbol_table: &'a mut SymbolTable,
+    scopes: Vec<CompilationScope>,
+    scope_index: usize,
 }
 
 impl<'a> Compiler<'a> {
-    // pub fn new() -> Compiler {
-    //     Compiler {
-    //         instructions: Instructions(vec![]),
-    //         constants: vec![],
-    //         last_instruction: None,
-    //         previous_instruction: None,
-    //         symbol_table: new_symbol_table(),
-    //     }
-    // }
-
     pub fn new_with_state(s: &'a mut SymbolTable, constants: &'a mut Vec<Object>) -> Compiler<'a> {
-        Compiler {
+        let main_scope = CompilationScope {
             instructions: Instructions(vec![]),
-            constants: constants,
             last_instruction: None,
             previous_instruction: None,
+        };
+        Compiler {
+            constants: constants,
             symbol_table: s,
+            scopes: vec![main_scope],
+            scope_index: 0,
         }
     }
 
@@ -48,9 +47,9 @@ impl<'a> Compiler<'a> {
         program.compile(self)
     }
 
-    pub fn bytecode(self) -> ByteCode<'a> {
+    pub fn bytecode(mut self) -> ByteCode<'a> {
         ByteCode {
-            instructions: self.instructions,
+            instructions: self.scopes.pop().unwrap().instructions,
             constants: self.constants,
         }
     }
@@ -72,8 +71,11 @@ impl<'a> Compiler<'a> {
     }
 
     fn add_instruction(&mut self, mut ins: Instructions) -> usize {
-        let pos_new_instruction = self.instructions.0.len();
-        self.instructions.0.append(&mut ins.0);
+        let pos_new_instruction = self.scopes[self.scope_index].instructions.0.len();
+        self.scopes[self.scope_index]
+            .instructions
+            .0
+            .append(&mut ins.0);
         pos_new_instruction
     }
 
@@ -82,7 +84,8 @@ impl<'a> Compiler<'a> {
             opcode: op,
             position: pos,
         });
-        self.previous_instruction = std::mem::replace(&mut self.last_instruction, last);
+        self.scopes[self.scope_index].previous_instruction =
+            std::mem::replace(&mut self.scopes[self.scope_index].last_instruction, last);
     }
 
     pub fn add_constant(&mut self, obj: Object) -> usize {
@@ -91,7 +94,7 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn last_instruction_is_pop(&self) -> bool {
-        if let Some(emitted) = &self.last_instruction {
+        if let Some(emitted) = &self.scopes[self.scope_index].last_instruction {
             emitted.opcode == Opcode::OpPop
         } else {
             false
@@ -99,22 +102,47 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn remove_last_pop(&mut self) {
-        self.instructions
+        let position = self.scopes[self.scope_index]
+            .last_instruction
+            .as_ref()
+            .unwrap()
+            .position;
+        self.scopes[self.scope_index]
+            .instructions
             .0
-            .truncate(self.last_instruction.as_ref().unwrap().position);
-        self.last_instruction = std::mem::replace(&mut self.previous_instruction, None);
+            .truncate(position);
+        self.scopes[self.scope_index].last_instruction = std::mem::replace(
+            &mut self.scopes[self.scope_index].previous_instruction,
+            None,
+        );
     }
 
     pub fn replace_instruction(&mut self, pos: usize, new_instuction: Instructions) {
         for (i, b) in new_instuction.0.iter().enumerate() {
-            self.instructions.0[pos + i] = *b;
+            self.scopes[self.scope_index].instructions.0[pos + i] = *b;
         }
     }
 
     pub fn change_operand(&mut self, op_pos: usize, operand: usize) {
-        let op = Opcode::from(self.instructions.0[op_pos]);
+        let op = Opcode::from(self.scopes[self.scope_index].instructions.0[op_pos]);
         let new_instuction = make_with_operands(op, &[operand]);
         self.replace_instruction(op_pos, new_instuction);
+    }
+
+    pub fn enter_scope(&mut self) {
+        let scope = CompilationScope {
+            instructions: Instructions(vec![]),
+            last_instruction: None,
+            previous_instruction: None,
+        };
+        self.scopes.push(scope);
+        self.scope_index += 1;
+    }
+
+    pub fn leave_scope(&mut self) -> Instructions {
+        let instructions = self.scopes.pop().unwrap().instructions;
+        self.scope_index -= 1;
+        instructions
     }
 }
 
@@ -253,7 +281,7 @@ impl_compile!(IfExpression => (self, compiler) {
 
     let jump_pos = compiler.emit_with_operands(Opcode::OpJump, &[9999]);
 
-    let after_consequense_pos = compiler.instructions.0.len();
+    let after_consequense_pos = compiler.scopes[compiler.scope_index].instructions.0.len();
     compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
 
     if let Some(alternative) = &self.alternative {
@@ -266,7 +294,7 @@ impl_compile!(IfExpression => (self, compiler) {
         compiler.emit(Opcode::OpNull);
     }
 
-    let after_alternative_pos = compiler.instructions.0.len();
+    let after_alternative_pos = compiler.scopes[compiler.scope_index].instructions.0.len();
     compiler.change_operand(jump_pos, after_alternative_pos);
 
     Ok(())
@@ -759,12 +787,44 @@ mod tests {
         run_compile_tests(tests)
     }
 
+    #[test]
+    fn test_compiler_scopes() {
+        let mut symbol_table = new_symbol_table();
+        let mut constants = new_constants();
+        let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
+        assert_eq!(compiler.scope_index, 0);
+        compiler.emit(Opcode::OpMul);
+
+        compiler.enter_scope();
+        assert_eq!(compiler.scope_index, 1);
+        compiler.emit(Opcode::OpSub);
+        assert_eq!(
+            compiler.scopes[compiler.scope_index].instructions.0.len(),
+            1
+        );
+        let last = &compiler.scopes[compiler.scope_index].last_instruction;
+        assert_eq!(last.as_ref().unwrap().opcode, Opcode::OpSub);
+
+        compiler.leave_scope();
+        assert_eq!(compiler.scope_index, 0);
+
+        compiler.emit(Opcode::OpAdd);
+        assert_eq!(
+            compiler.scopes[compiler.scope_index].instructions.0.len(),
+            2
+        );
+        let last = &compiler.scopes[compiler.scope_index].last_instruction;
+        assert_eq!(last.as_ref().unwrap().opcode, Opcode::OpAdd);
+        let previous = &compiler.scopes[compiler.scope_index].previous_instruction;
+        assert_eq!(previous.as_ref().unwrap().opcode, Opcode::OpMul);
+    }
+
     fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
 
             let mut symbol_table = new_symbol_table();
-            let mut constants = Vec::new();
+            let mut constants = new_constants();
             let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
             if let Err(err) = compiler.compile(program) {
                 assert!(false, "compile error. {}", err)
