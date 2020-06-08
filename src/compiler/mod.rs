@@ -221,6 +221,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::HashLiteral(exp) => exp.compile(compiler),
         Expression::IndexExpression(exp) => exp.compile(compiler),
         Expression::FunctionLiteral(exp) => exp.compile(compiler),
+        Expression::CallExpression(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -380,6 +381,12 @@ impl_compile!(FunctionLiteral => (self, compiler) {
     let compiled_fn = Object::CompiledFunction(object::CompiledFunction{instructions});
     let operand = compiler.add_constant(compiled_fn);
     compiler.emit_with_operands(Opcode::OpConstant, &[operand]);
+    Ok(())
+});
+
+impl_compile!(CallExpression => (self, compiler) {
+    self.function.compile(compiler)?;
+    compiler.emit(Opcode::OpCall);
     Ok(())
 });
 
@@ -903,6 +910,48 @@ mod tests {
         assert_eq!(last.as_ref().unwrap().opcode, Opcode::OpAdd);
         let previous = &compiler.scopes[compiler.scope_index].previous_instruction;
         assert_eq!(previous.as_ref().unwrap().opcode, Opcode::OpMul);
+    }
+
+    #[test]
+    fn test_function_calls() {
+        let tests = vec![
+            (
+                "fn() { 24 }()",
+                vec![
+                    Expect::Integer(24),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpCall),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+            let noArg = fn() { 24 };
+            noArg();
+            "#,
+                vec![
+                    Expect::Integer(24),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpGetGlobal, &[0]),
+                    make(Opcode::OpCall),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+        run_compile_tests(tests);
     }
 
     fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
