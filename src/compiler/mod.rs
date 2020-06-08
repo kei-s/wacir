@@ -2,6 +2,7 @@ mod symbol_table;
 
 use super::ast::*;
 use super::code::*;
+use super::object;
 use super::object::Object;
 pub use symbol_table::new_symbol_table;
 use symbol_table::*;
@@ -93,9 +94,9 @@ impl<'a> Compiler<'a> {
         self.constants.len() - 1
     }
 
-    pub fn last_instruction_is_pop(&self) -> bool {
+    pub fn last_instruction_is(&self, op: Opcode) -> bool {
         if let Some(emitted) = &self.scopes[self.scope_index].last_instruction {
-            emitted.opcode == Opcode::OpPop
+            emitted.opcode == op
         } else {
             false
         }
@@ -144,6 +145,20 @@ impl<'a> Compiler<'a> {
         self.scope_index -= 1;
         instructions
     }
+
+    pub fn replace_last_pop_with_return(&mut self) {
+        let last_pos = self.scopes[self.scope_index]
+            .last_instruction
+            .as_ref()
+            .unwrap()
+            .position;
+        self.replace_instruction(last_pos, make(Opcode::OpReturnValue));
+        self.scopes[self.scope_index]
+            .last_instruction
+            .as_mut()
+            .unwrap()
+            .opcode = Opcode::OpReturnValue;
+    }
 }
 
 trait Compile {
@@ -177,6 +192,11 @@ impl_compile!(Statement => (self, compiler) {
         Statement::LetStatement(stmt) => {
             stmt.compile(compiler)
         }
+        Statement::ReturnStatement(stmt) => {
+            stmt.return_value.compile(compiler)?;
+            compiler.emit(Opcode::OpReturnValue);
+            Ok(())
+        }
         _ => todo!(),
     }
 });
@@ -200,6 +220,7 @@ impl_compile!(Expression => (self, compiler) {
         Expression::ArrayLiteral(exp) => exp.compile(compiler),
         Expression::HashLiteral(exp) => exp.compile(compiler),
         Expression::IndexExpression(exp) => exp.compile(compiler),
+        Expression::FunctionLiteral(exp) => exp.compile(compiler),
         _ => todo!("other expressions: {:?}", self),
     }
 });
@@ -275,7 +296,7 @@ impl_compile!(IfExpression => (self, compiler) {
 
     self.consequence.compile(compiler)?;
 
-    if compiler.last_instruction_is_pop() {
+    if compiler.last_instruction_is(Opcode::OpPop) {
         compiler.remove_last_pop()
     }
 
@@ -287,7 +308,7 @@ impl_compile!(IfExpression => (self, compiler) {
     if let Some(alternative) = &self.alternative {
         alternative.compile(compiler)?;
 
-        if compiler.last_instruction_is_pop() {
+        if compiler.last_instruction_is(Opcode::OpPop) {
             compiler.remove_last_pop();
         }
     } else {
@@ -343,6 +364,22 @@ impl_compile!(IndexExpression => (self, compiler) {
     self.left.compile(compiler)?;
     self.index.compile(compiler)?;
     compiler.emit(Opcode::OpIndex);
+    Ok(())
+});
+
+impl_compile!(FunctionLiteral => (self, compiler) {
+    compiler.enter_scope();
+    self.body.compile(compiler)?;
+    if compiler.last_instruction_is(Opcode::OpPop) {
+        compiler.replace_last_pop_with_return();
+    }
+    if !compiler.last_instruction_is(Opcode::OpReturnValue) {
+        compiler.emit(Opcode::OpReturn);
+    }
+    let instructions = compiler.leave_scope();
+    let compiled_fn = Object::CompiledFunction(object::CompiledFunction{instructions});
+    let operand = compiler.add_constant(compiled_fn);
+    compiler.emit_with_operands(Opcode::OpConstant, &[operand]);
     Ok(())
 });
 
@@ -767,24 +804,73 @@ mod tests {
 
     #[test]
     fn test_functions() {
+        let tests = vec![
+            (
+                "fn() { return 5 + 10 }",
+                vec![
+                    Expect::Integer(5),
+                    Expect::Integer(10),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make(Opcode::OpAdd),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "fn() { 5 + 10 }",
+                vec![
+                    Expect::Integer(5),
+                    Expect::Integer(10),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make(Opcode::OpAdd),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                "fn() { 1; 2 }",
+                vec![
+                    Expect::Integer(1),
+                    Expect::Integer(2),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make(Opcode::OpPop),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+        run_compile_tests(tests)
+    }
+
+    #[test]
+    fn test_functions_without_return_value() {
         let tests = vec![(
-            "fn() { return 5 + 10 }",
+            "fn() { }",
+            vec![Expect::Instructions(vec![make(Opcode::OpReturn)])],
             vec![
-                Expect::Integer(5),
-                Expect::Integer(10),
-                Expect::Instructions(vec![
-                    make_with_operands(Opcode::OpConstant, &[0]),
-                    make_with_operands(Opcode::OpConstant, &[1]),
-                    make(Opcode::OpAdd),
-                    make(Opcode::OpReturnValue),
-                ]),
-            ],
-            vec![
-                make_with_operands(Opcode::OpConstant, &[2]),
+                make_with_operands(Opcode::OpConstant, &[0]),
                 make(Opcode::OpPop),
             ],
         )];
-        run_compile_tests(tests)
+        run_compile_tests(tests);
     }
 
     #[test]
