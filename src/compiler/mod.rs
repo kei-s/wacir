@@ -71,12 +71,13 @@ impl<'a> Compiler<'a> {
         pos
     }
 
+    fn current_instructions(&mut self) -> &mut Instructions {
+        &mut self.scopes[self.scope_index].instructions
+    }
+
     fn add_instruction(&mut self, mut ins: Instructions) -> usize {
-        let pos_new_instruction = self.scopes[self.scope_index].instructions.0.len();
-        self.scopes[self.scope_index]
-            .instructions
-            .0
-            .append(&mut ins.0);
+        let pos_new_instruction = self.current_instructions().0.len();
+        self.current_instructions().0.append(&mut ins.0);
         pos_new_instruction
     }
 
@@ -108,10 +109,7 @@ impl<'a> Compiler<'a> {
             .as_ref()
             .unwrap()
             .position;
-        self.scopes[self.scope_index]
-            .instructions
-            .0
-            .truncate(position);
+        self.current_instructions().0.truncate(position);
         self.scopes[self.scope_index].last_instruction = std::mem::replace(
             &mut self.scopes[self.scope_index].previous_instruction,
             None,
@@ -120,12 +118,12 @@ impl<'a> Compiler<'a> {
 
     pub fn replace_instruction(&mut self, pos: usize, new_instuction: Instructions) {
         for (i, b) in new_instuction.0.iter().enumerate() {
-            self.scopes[self.scope_index].instructions.0[pos + i] = *b;
+            self.current_instructions().0[pos + i] = *b;
         }
     }
 
     pub fn change_operand(&mut self, op_pos: usize, operand: usize) {
-        let op = Opcode::from(self.scopes[self.scope_index].instructions.0[op_pos]);
+        let op = Opcode::from(self.current_instructions().0[op_pos]);
         let new_instuction = make_with_operands(op, &[operand]);
         self.replace_instruction(op_pos, new_instuction);
     }
@@ -303,7 +301,7 @@ impl_compile!(IfExpression => (self, compiler) {
 
     let jump_pos = compiler.emit_with_operands(Opcode::OpJump, &[9999]);
 
-    let after_consequense_pos = compiler.scopes[compiler.scope_index].instructions.0.len();
+    let after_consequense_pos = compiler.current_instructions().0.len();
     compiler.change_operand(jump_not_truthy_pos, after_consequense_pos);
 
     if let Some(alternative) = &self.alternative {
@@ -316,7 +314,7 @@ impl_compile!(IfExpression => (self, compiler) {
         compiler.emit(Opcode::OpNull);
     }
 
-    let after_alternative_pos = compiler.scopes[compiler.scope_index].instructions.0.len();
+    let after_alternative_pos = compiler.current_instructions().0.len();
     compiler.change_operand(jump_pos, after_alternative_pos);
 
     Ok(())
