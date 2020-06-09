@@ -1,13 +1,17 @@
+mod frame;
+
 use super::code::*;
 use super::compiler::*;
 use super::object;
 use super::object::hash::hash_key_of;
 use super::object::Object;
+use frame::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
 const STACK_SIZE: usize = 2048;
 pub const GLOBALS_SIZE: usize = 65536;
+const MAX_FRAMES: usize = 1024;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 const NULL: Object = Object::Null;
@@ -18,44 +22,44 @@ pub fn new_globals_store() -> Vec<Object> {
 
 pub struct VM<'a> {
     constants: &'a mut Vec<Object>,
-    instructions: Instructions,
     stack: Vec<Object>,
     sp: usize,
     pub last_popped_stack_elem: Option<Object>,
     globals: &'a mut Vec<Object>,
+    frames: Vec<Frame>,
+    frame_index: usize,
 }
 
 impl<'a> VM<'a> {
-    // pub fn new(bytecode: ByteCode) -> VM {
-    //     VM {
-    //         constants: bytecode.constants,
-    //         instructions: bytecode.instructions,
-    //         stack: Vec::with_capacity(STACK_SIZE),
-    //         sp: 0,
-    //         last_popped_stack_elem: None,
-    //         globals: Vec::with_capacity(GLOBALS_SIZE),
-    //     }
-    // }
-
     pub fn new_with_globals_store(bytecode: ByteCode<'a>, s: &'a mut Vec<Object>) -> VM<'a> {
+        let main_fn = object::CompiledFunction {
+            instructions: bytecode.instructions,
+        };
+        let main_frame = new_frame(main_fn);
+
+        let mut frames = Vec::with_capacity(MAX_FRAMES);
+        frames.push(main_frame);
+
         VM {
             constants: bytecode.constants,
-            instructions: bytecode.instructions,
             stack: Vec::with_capacity(STACK_SIZE),
             sp: 0,
             last_popped_stack_elem: None,
             globals: s,
+            frames: frames,
+            frame_index: 1,
         }
     }
 
     pub fn run(&mut self) -> Result<(), String> {
-        let mut ip = 0;
-        while ip < self.instructions.0.len() {
-            let op = Opcode::from(self.instructions.0[ip]);
+        while self.current_frame().ip < self.current_frame().instructions().0.len() {
+            let ip = self.current_frame().ip;
+            let ins = self.current_frame().instructions();
+            let op = Opcode::from(ins.0[ip]);
             match op {
                 Opcode::OpConstant => {
-                    let const_index = read_uint16(&self.instructions, ip + 1);
-                    ip += 2;
+                    let const_index = read_uint16(ins, ip + 1);
+                    self.current_frame().ip += 2;
                     // TODO: clone() どうにかなるか
                     let constant = self.constants[const_index as usize].clone();
                     self.push(constant)?;
@@ -82,24 +86,24 @@ impl<'a> VM<'a> {
                     self.execute_minus_operator()?;
                 }
                 Opcode::OpJump => {
-                    let pos = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip = pos - 1;
+                    let pos = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip = pos - 1;
                 }
                 Opcode::OpJumpNotTruthy => {
-                    let pos = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip += 2;
+                    let pos = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip += 2;
 
                     let condition = self.pop();
                     if !Self::is_truthy(condition) {
-                        ip = pos - 1;
+                        self.current_frame().ip = pos - 1;
                     }
                 }
                 Opcode::OpNull => {
                     self.push(NULL)?;
                 }
                 Opcode::OpSetGlobal => {
-                    let global_index = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip += 2;
+                    let global_index = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip += 2;
                     let popped = self.pop();
                     if self.globals.len() == global_index {
                         self.globals.push(popped);
@@ -108,22 +112,22 @@ impl<'a> VM<'a> {
                     }
                 }
                 Opcode::OpGetGlobal => {
-                    let global_index = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip += 2;
+                    let global_index = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip += 2;
                     // TODO: clone() どうにかなるか
                     let obj = (&self.globals[global_index]).clone();
                     self.push(obj)?;
                 }
                 Opcode::OpArray => {
-                    let num_elements = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip += 2;
+                    let num_elements = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip += 2;
                     let array = self.build_array(self.sp - num_elements, self.sp);
                     self.sp -= num_elements;
                     self.push(array)?;
                 }
                 Opcode::OpHash => {
-                    let num_elements = read_uint16(&self.instructions, ip + 1) as usize;
-                    ip += 2;
+                    let num_elements = read_uint16(ins, ip + 1) as usize;
+                    self.current_frame().ip += 2;
                     let hash = self.build_hash(self.sp - num_elements, self.sp)?;
                     self.sp -= num_elements;
                     self.push(hash)?;
@@ -136,7 +140,7 @@ impl<'a> VM<'a> {
                 //
                 _ => todo!("unknown Opcode: {:?}", op),
             }
-            ip += 1;
+            self.current_frame().ip += 1;
         }
         Ok(())
     }
@@ -320,6 +324,20 @@ impl<'a> VM<'a> {
             Object::Null => false,
             _ => true,
         }
+    }
+
+    fn current_frame(&mut self) -> &mut Frame {
+        &mut self.frames[self.frame_index - 1]
+    }
+
+    fn push_frame(&mut self, frame: Frame) {
+        self.frames.push(frame);
+        self.frame_index += 1;
+    }
+
+    fn pop_frame(&mut self) -> Frame {
+        self.frame_index -= 1;
+        self.frames.pop().unwrap()
     }
 
     pub fn stack_top(&self) -> Option<&Object> {
