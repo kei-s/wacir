@@ -137,8 +137,31 @@ impl<'a> VM<'a> {
                     let left = self.pop();
                     self.execute_index_expression(left, index)?;
                 }
+                Opcode::OpCall => {
+                    let obj = &self.stack[self.sp - 1];
+                    if let Object::CompiledFunction(func) = obj {
+                        // TODO: clone() でいいのか？ self.stack から pop したものじゃダメ？
+                        let frame = new_frame(func.clone());
+                        self.push_frame(frame);
+                        // self.current_frame().ip += 1; させないために continue する
+                        continue;
+                    } else {
+                        return Err("calling non-function".to_string());
+                    }
+                }
+                Opcode::OpReturnValue => {
+                    let return_value = self.pop();
+                    self.pop_frame();
+                    self.pop();
+                    self.push(return_value)?;
+                }
+                Opcode::OpReturn => {
+                    self.pop_frame();
+                    self.pop();
+                    self.push(NULL)?;
+                }
                 //
-                _ => todo!("unknown Opcode: {:?}", op),
+                // _ => todo!("unknown Opcode: {:?}", op),
             }
             self.current_frame().ip += 1;
         }
@@ -516,6 +539,95 @@ mod tests {
             ];
             run_vm_tests(tests);
         }
+    }
+
+    #[test]
+    fn test_calling_functions_wihtout_arguments() {
+        let tests = vec![
+            (
+                r#"
+                let fivePlusTen = fn() { 5 + 10 };
+                fivePlusTen();
+                "#,
+                15,
+            ),
+            (
+                r#"
+                let one = fn() { 1 };
+                let two = fn() { 2 };
+                one() + two()
+                "#,
+                3,
+            ),
+            (
+                r#"
+                let a = fn() { 1 };
+                let b = fn() { a() + 1 };
+                let c = fn() { b() + 1 };
+                c();
+                "#,
+                3,
+            ),
+        ];
+
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_functions_with_return_statement() {
+        let tests = vec![
+            (
+                r#"
+                let earlyExit = fn() { return 99; 100; };
+                earlyExit();
+                "#,
+                99,
+            ),
+            (
+                r#"
+                let earlyExit = fn() { return 99; return 100; };
+                earlyExit();
+                "#,
+                99,
+            ),
+        ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_functions_without_return_value() {
+        let tests = vec![
+            (
+                r#"
+                let noReturn = fn() { };
+                noReturn();
+                "#,
+                NULL,
+            ),
+            (
+                r#"
+                let noReturn = fn() { };
+                let noReturnTwo = fn() { noReturn() };
+                noReturn();
+                noReturnTwo();
+                "#,
+                NULL,
+            ),
+        ];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_first_class_functions() {
+        let tests = vec![(
+            r#"
+            let returnsOne = fn() { 1; };
+            let returnsOneReturner = fn() { returnsOne };
+            returnsOneReturner()();
+            "#,
+            1,
+        )];
+        run_vm_tests(tests);
     }
 
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
