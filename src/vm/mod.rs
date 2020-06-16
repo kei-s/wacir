@@ -161,7 +161,7 @@ impl<'a> VM<'a> {
                     self.push(NULL)?;
                 }
                 //
-                // _ => todo!("unknown Opcode: {:?}", op),
+                _ => todo!("unknown Opcode: {:?}", op),
             }
             self.current_frame().ip += 1;
         }

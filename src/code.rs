@@ -163,7 +163,9 @@ opcode_enum!(
         OpIndex: [],
         OpCall: [],
         OpReturnValue: [],
-        OpReturn: []
+        OpReturn: [],
+        OpGetLocal: [1],
+        OpSetLocal: [1]
     ]
 );
 
@@ -192,6 +194,9 @@ pub fn make_with_operands(op: Opcode, operands: &[usize]) -> Instructions {
                 let bytes = (*o as u16).to_be_bytes();
                 instruction.extend_from_slice(&bytes);
             }
+            1 => {
+                instruction.push(*o as u8);
+            }
             _ => unreachable!(),
         }
     }
@@ -206,8 +211,12 @@ pub fn read_operands(def: &Definition, ins: &[u8]) -> (Vec<usize>, usize) {
     for width in &def.operand_width {
         match width {
             2 => {
-                let i = ins[offset..offset + 2].try_into().unwrap();
+                let i = ins[offset..offset + width].try_into().unwrap();
                 operands.push(u16::from_be_bytes(i) as usize);
+            }
+            1 => {
+                let i = ins[offset..offset + width].try_into().unwrap();
+                operands.push(u8::from_be_bytes(i) as usize);
             }
             _ => {}
         }
@@ -228,11 +237,18 @@ mod tests {
     #[test]
     fn test_make() {
         {
-            let tests = vec![(
-                Opcode::OpConstant,
-                vec![65534],
-                Instructions(vec![0u8, 255u8, 254u8]),
-            )];
+            let tests = vec![
+                (
+                    Opcode::OpConstant,
+                    vec![65534],
+                    Instructions(vec![0u8, 255u8, 254u8]),
+                ),
+                (
+                    Opcode::OpGetLocal,
+                    vec![255],
+                    Instructions(vec![Opcode::OpGetLocal.byte(), 255]),
+                ),
+            ];
 
             for (op, operands, expected) in tests {
                 let instruction = make_with_operands(op, &operands);
@@ -254,13 +270,15 @@ mod tests {
     fn test_instruction_string() {
         let instructions = vec![
             make(Opcode::OpAdd),
-            make_with_operands(Opcode::OpConstant, &vec![2]),
-            make_with_operands(Opcode::OpConstant, &vec![65535]),
+            make_with_operands(Opcode::OpGetLocal, &[1]),
+            make_with_operands(Opcode::OpConstant, &[2]),
+            make_with_operands(Opcode::OpConstant, &[65535]),
         ];
 
         let expected = r"0000 OpAdd
-0001 OpConstant 2
-0004 OpConstant 65535
+0001 OpGetLocal 1
+0003 OpConstant 2
+0006 OpConstant 65535
 ";
         let concatted = instructions.concat();
 
@@ -269,7 +287,10 @@ mod tests {
 
     #[test]
     fn test_read_operands() {
-        let tests = vec![(Opcode::OpConstant, vec![65535], 2)];
+        let tests = vec![
+            (Opcode::OpConstant, vec![65535], 2),
+            (Opcode::OpGetLocal, vec![255], 1),
+        ];
 
         for (op, operands, bytes_read) in tests {
             let def = lookup(&op);
