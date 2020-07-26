@@ -25,22 +25,22 @@ pub fn start() {
             continue;
         }
 
-        let mut comp = compiler::Compiler::new_with_state(&mut symbol_table, &mut constants);
-        if let Err(err) = comp.compile(program) {
-            println!("Woops! Compilation failed:\n {}", err);
-            continue;
-        }
+        // let mut comp = compiler::Compiler::new_with_state(&mut symbol_table, &mut constants);
+        // if let Err(err) = comp.compile(program) {
+        //     println!("Woops! Compilation failed:\n {}", err);
+        //     continue;
+        // }
 
-        let mut machine = vm::VM::new_with_globals_store(comp.bytecode(), &mut globals);
-        if let Err(err) = machine.run() {
-            println!("Woops! Executing bytecode failed:\n {}", err);
-            continue;
-        }
+        // let mut machine = vm::VM::new_with_globals_store(comp.bytecode(), &mut globals);
+        // if let Err(err) = machine.run() {
+        //     println!("Woops! Executing bytecode failed:\n {}", err);
+        //     continue;
+        // }
 
-        match machine.last_popped_stack_elem {
-            Some(stack_top) => println!("{}", stack_top),
-            None => println!("None."),
-        }
+        // match machine.last_popped_stack_elem {
+        //     Some(stack_top) => println!("{}", stack_top),
+        //     None => println!("None."),
+        // }
     }
 }
 

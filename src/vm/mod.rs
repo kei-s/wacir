@@ -21,7 +21,7 @@ pub fn new_globals_store() -> Vec<Object> {
 }
 
 pub struct VM<'a> {
-    constants: &'a mut Vec<Object>,
+    constants: Vec<Object>,
     stack: Vec<Object>,
     sp: usize,
     pub last_popped_stack_elem: Option<Object>,
@@ -31,7 +31,7 @@ pub struct VM<'a> {
 }
 
 impl<'a> VM<'a> {
-    pub fn new_with_globals_store(bytecode: ByteCode<'a>, s: &'a mut Vec<Object>) -> VM<'a> {
+    pub fn new_with_globals_store(bytecode: ByteCode, s: &'a mut Vec<Object>) -> VM<'a> {
         let main_fn = object::CompiledFunction {
             instructions: bytecode.instructions,
         };
@@ -633,9 +633,7 @@ mod tests {
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
         for (input, expected) in tests {
             let program = parse(input.to_string());
-            let mut symbol_table = new_symbol_table();
-            let mut constants = new_constants();
-            let mut comp = Compiler::new_with_state(&mut symbol_table, &mut constants);
+            let mut comp = Compiler::new();
             if let Err(err) = comp.compile(program) {
                 assert!(false, "compile error: {}", err);
             }
