@@ -4,6 +4,8 @@ use super::ast::*;
 use super::code::*;
 use super::object;
 use super::object::Object;
+use std::cell::RefCell;
+use std::rc::Rc;
 pub use symbol_table::new_symbol_table;
 use symbol_table::*;
 
@@ -24,13 +26,16 @@ struct CompilationScope {
 
 pub struct Compiler<'a> {
     constants: &'a mut Vec<Object>,
-    symbol_table: &'a mut SymbolTable,
+    symbol_table: &'a mut Rc<RefCell<SymbolTable>>,
     scopes: Vec<CompilationScope>,
     scope_index: usize,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new_with_state(s: &'a mut SymbolTable, constants: &'a mut Vec<Object>) -> Compiler<'a> {
+    pub fn new_with_state(
+        s: &'a mut Rc<RefCell<SymbolTable>>,
+        constants: &'a mut Vec<Object>,
+    ) -> Compiler<'a> {
         let main_scope = CompilationScope {
             instructions: Instructions(vec![]),
             last_instruction: None,
@@ -201,7 +206,7 @@ impl_compile!(Statement => (self, compiler) {
 
 impl_compile!(LetStatement => (self, compiler) {
     self.value.compile(compiler)?;
-    let index = compiler.symbol_table.define(&self.name.value).index;
+    let index = compiler.symbol_table.borrow_mut().define(&self.name.value).index;
     compiler.emit_with_operands(Opcode::OpSetGlobal, &[index]);
     Ok(())
 });
@@ -328,7 +333,7 @@ impl_compile!(BlockStatement => (self, compiler) {
 });
 
 impl_compile!(Identifier => (self, compiler) {
-    let index = compiler.symbol_table.resolve(&self.value).expect(
+    let index = compiler.symbol_table.borrow().resolve(&self.value).expect(
         &format!("undefined variable: {}", self.value)
     ).index;
     compiler.emit_with_operands(Opcode::OpGetGlobal, &[index]);
@@ -930,9 +935,9 @@ mod tests {
             ),
             (
                 r#"
-            let noArg = fn() { 24 };
-            noArg();
-            "#,
+                let noArg = fn() { 24 };
+                noArg();
+                "#,
                 vec![
                     Expect::Integer(24),
                     Expect::Instructions(vec![
@@ -968,6 +973,81 @@ mod tests {
             test_instructions(&expected_instructions, &bytecode.instructions);
             test_constants(expected_constants, bytecode.constants.to_vec());
         }
+    }
+
+    #[test]
+    fn test_let_statement_scopes() {
+        let tests = vec![
+            (
+                r#"
+                let num = 55;
+                fn() { num }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let num = 55;
+                    num
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let a = 55;
+                    let b = 77;
+                    a + b
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Integer(77),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make_with_operands(Opcode::OpSetLocal, &[1]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[1]),
+                        make(Opcode::OpAdd),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests);
     }
 
     fn parse(input: String) -> Program {
