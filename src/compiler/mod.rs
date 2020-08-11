@@ -4,11 +4,13 @@ use super::ast::*;
 use super::code::*;
 use super::object;
 use super::object::Object;
-pub use symbol_table::new_symbol_table;
+use std::cell::RefCell;
+use std::rc::Rc;
+pub use symbol_table::new_symbol_table_arena;
 use symbol_table::*;
 
-pub fn new_constants() -> Vec<Object> {
-    vec![]
+pub fn new_constants() -> Rc<RefCell<Vec<Object>>> {
+    Rc::new(RefCell::new(vec![]))
 }
 
 struct EmittedInstruction {
@@ -23,22 +25,28 @@ struct CompilationScope {
 }
 
 pub struct Compiler<'a> {
-    constants: &'a mut Vec<Object>,
-    symbol_table: &'a mut SymbolTable,
+    constants: Rc<RefCell<Vec<Object>>>,
+    symbol_table_arena: &'a SymbolTableArena<'a>,
+    symbol_table: &'a mut SymbolTable<'a>,
     scopes: Vec<CompilationScope>,
     scope_index: usize,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new_with_state(s: &'a mut SymbolTable, constants: &'a mut Vec<Object>) -> Compiler<'a> {
+    pub fn new_with_state(
+        symbol_table_arena: &'a SymbolTableArena<'a>,
+        constants: Rc<RefCell<Vec<Object>>>,
+    ) -> Compiler<'a> {
         let main_scope = CompilationScope {
             instructions: Instructions(vec![]),
             last_instruction: None,
             previous_instruction: None,
         };
+        let symbol_table = symbol_table_arena.new_symbol_table();
         Compiler {
             constants: constants,
-            symbol_table: s,
+            symbol_table_arena,
+            symbol_table,
             scopes: vec![main_scope],
             scope_index: 0,
         }
@@ -48,7 +56,7 @@ impl<'a> Compiler<'a> {
         program.compile(self)
     }
 
-    pub fn bytecode(mut self) -> ByteCode<'a> {
+    pub fn bytecode(mut self) -> ByteCode {
         ByteCode {
             instructions: self.scopes.pop().unwrap().instructions,
             constants: self.constants,
@@ -91,8 +99,8 @@ impl<'a> Compiler<'a> {
     }
 
     pub fn add_constant(&mut self, obj: Object) -> usize {
-        self.constants.push(obj);
-        self.constants.len() - 1
+        self.constants.borrow_mut().push(obj);
+        self.constants.borrow().len() - 1
     }
 
     pub fn last_instruction_is(&self, op: Opcode) -> bool {
@@ -136,6 +144,9 @@ impl<'a> Compiler<'a> {
         };
         self.scopes.push(scope);
         self.scope_index += 1;
+        self.symbol_table = self
+            .symbol_table_arena
+            .new_enclosed_symbol_table(self.symbol_table);
     }
 
     pub fn leave_scope(&mut self) -> Instructions {
@@ -388,9 +399,9 @@ impl_compile!(CallExpression => (self, compiler) {
     Ok(())
 });
 
-pub struct ByteCode<'a> {
+pub struct ByteCode {
     pub instructions: Instructions,
-    pub constants: &'a mut Vec<Object>,
+    pub constants: Rc<RefCell<Vec<Object>>>,
 }
 
 #[cfg(test)]
@@ -880,10 +891,11 @@ mod tests {
 
     #[test]
     fn test_compiler_scopes() {
-        let mut symbol_table = new_symbol_table();
-        let mut constants = new_constants();
-        let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
+        let symbol_table_arena = new_symbol_table_arena();
+        let constants = new_constants();
+        let mut compiler = Compiler::new_with_state(&symbol_table_arena, constants);
         assert_eq!(compiler.scope_index, 0);
+        // let global_symbol_table = compiler.symbol_table;
         compiler.emit(Opcode::OpMul);
 
         compiler.enter_scope();
@@ -895,9 +907,12 @@ mod tests {
         );
         let last = &compiler.scopes[compiler.scope_index].last_instruction;
         assert_eq!(last.as_ref().unwrap().opcode, Opcode::OpSub);
+        // assert_eq!(compiler.symbol_table.outer.unwrap(), global_symbol_table);
 
         compiler.leave_scope();
         assert_eq!(compiler.scope_index, 0);
+        // assert_eq!(compiler.symbol_table, global_symbol_table);
+        // assert_eq!(compiler.symbol_table.outer, None);
 
         compiler.emit(Opcode::OpAdd);
         assert_eq!(
@@ -930,9 +945,9 @@ mod tests {
             ),
             (
                 r#"
-            let noArg = fn() { 24 };
-            noArg();
-            "#,
+                let noArg = fn() { 24 };
+                noArg();
+                "#,
                 vec![
                     Expect::Integer(24),
                     Expect::Instructions(vec![
@@ -952,13 +967,88 @@ mod tests {
         run_compile_tests(tests);
     }
 
+    #[test]
+    fn test_let_statement_scopes() {
+        let tests = vec![
+            (
+                r#"
+                let num = 55;
+                fn() { num }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let num = 55;
+                    num
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let a = 55;
+                    let b = 77;
+                    a + b
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Integer(77),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make_with_operands(Opcode::OpSetLocal, &[1]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[1]),
+                        make(Opcode::OpAdd),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests);
+    }
+
     fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
 
-            let mut symbol_table = new_symbol_table();
-            let mut constants = new_constants();
-            let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
+            let symbol_table_arena = new_symbol_table_arena();
+            let constants = new_constants();
+            let mut compiler = Compiler::new_with_state(&symbol_table_arena, constants);
             if let Err(err) = compiler.compile(program) {
                 assert!(false, "compile error. {}", err)
             }
@@ -966,7 +1056,7 @@ mod tests {
             let bytecode = compiler.bytecode();
 
             test_instructions(&expected_instructions, &bytecode.instructions);
-            test_constants(expected_constants, bytecode.constants.to_vec());
+            test_constants(expected_constants, bytecode.constants.borrow().to_vec());
         }
     }
 

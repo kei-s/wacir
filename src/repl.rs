@@ -1,13 +1,14 @@
 use super::{compiler, lexer, parser, vm};
 use std::io;
 use std::io::prelude::Write;
+use std::rc::Rc;
 
 pub fn start() {
     const PROMPT: &str = ">> ";
 
-    let mut constants = compiler::new_constants();
+    let constants = compiler::new_constants();
     let mut globals = vm::new_globals_store();
-    let mut symbol_table = compiler::new_symbol_table();
+    let new_symbol_table_arena = compiler::new_symbol_table_arena();
 
     loop {
         print!("{}", PROMPT);
@@ -25,7 +26,8 @@ pub fn start() {
             continue;
         }
 
-        let mut comp = compiler::Compiler::new_with_state(&mut symbol_table, &mut constants);
+        let mut comp =
+            compiler::Compiler::new_with_state(&new_symbol_table_arena, Rc::clone(&constants));
         if let Err(err) = comp.compile(program) {
             println!("Woops! Compilation failed:\n {}", err);
             continue;

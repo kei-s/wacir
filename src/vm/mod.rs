@@ -6,8 +6,10 @@ use super::object;
 use super::object::hash::hash_key_of;
 use super::object::Object;
 use frame::*;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::rc::Rc;
 
 const STACK_SIZE: usize = 2048;
 pub const GLOBALS_SIZE: usize = 65536;
@@ -21,7 +23,7 @@ pub fn new_globals_store() -> Vec<Object> {
 }
 
 pub struct VM<'a> {
-    constants: &'a mut Vec<Object>,
+    constants: Rc<RefCell<Vec<Object>>>,
     stack: Vec<Object>,
     sp: usize,
     pub last_popped_stack_elem: Option<Object>,
@@ -31,7 +33,7 @@ pub struct VM<'a> {
 }
 
 impl<'a> VM<'a> {
-    pub fn new_with_globals_store(bytecode: ByteCode<'a>, s: &'a mut Vec<Object>) -> VM<'a> {
+    pub fn new_with_globals_store(bytecode: ByteCode, s: &'a mut Vec<Object>) -> VM<'a> {
         let main_fn = object::CompiledFunction {
             instructions: bytecode.instructions,
         };
@@ -61,7 +63,7 @@ impl<'a> VM<'a> {
                     let const_index = read_uint16(ins, ip + 1);
                     self.current_frame().ip += 2;
                     // TODO: clone() どうにかなるか
-                    let constant = self.constants[const_index as usize].clone();
+                    let constant = self.constants.borrow()[const_index as usize].clone();
                     self.push(constant)?;
                 }
                 Opcode::OpAdd | Opcode::OpSub | Opcode::OpMul | Opcode::OpDiv => {
@@ -633,9 +635,9 @@ mod tests {
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
         for (input, expected) in tests {
             let program = parse(input.to_string());
-            let mut symbol_table = new_symbol_table();
-            let mut constants = new_constants();
-            let mut comp = Compiler::new_with_state(&mut symbol_table, &mut constants);
+            let symbol_table_arena = new_symbol_table_arena();
+            let constants = new_constants();
+            let mut comp = Compiler::new_with_state(&symbol_table_arena, constants);
             if let Err(err) = comp.compile(program) {
                 assert!(false, "compile error: {}", err);
             }
