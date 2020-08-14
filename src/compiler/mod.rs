@@ -4,7 +4,7 @@ use super::ast::*;
 use super::code::*;
 use super::object;
 use super::object::Object;
-pub use symbol_table::new_symbol_table;
+pub use symbol_table::new_symbol_table_stack;
 use symbol_table::*;
 
 pub fn new_constants() -> Vec<Object> {
@@ -24,13 +24,16 @@ struct CompilationScope {
 
 pub struct Compiler<'a> {
     constants: &'a mut Vec<Object>,
-    symbol_table: &'a mut SymbolTable,
+    symbol_table_stack: &'a mut SymbolTableStack,
     scopes: Vec<CompilationScope>,
     scope_index: usize,
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new_with_state(s: &'a mut SymbolTable, constants: &'a mut Vec<Object>) -> Compiler<'a> {
+    pub fn new_with_state(
+        s: &'a mut SymbolTableStack,
+        constants: &'a mut Vec<Object>,
+    ) -> Compiler<'a> {
         let main_scope = CompilationScope {
             instructions: Instructions(vec![]),
             last_instruction: None,
@@ -38,7 +41,7 @@ impl<'a> Compiler<'a> {
         };
         Compiler {
             constants: constants,
-            symbol_table: s,
+            symbol_table_stack: s,
             scopes: vec![main_scope],
             scope_index: 0,
         }
@@ -136,11 +139,13 @@ impl<'a> Compiler<'a> {
         };
         self.scopes.push(scope);
         self.scope_index += 1;
+        self.symbol_table_stack.push();
     }
 
     pub fn leave_scope(&mut self) -> Instructions {
         let instructions = self.scopes.pop().unwrap().instructions;
         self.scope_index -= 1;
+        self.symbol_table_stack.pop();
         instructions
     }
 
@@ -195,14 +200,19 @@ impl_compile!(Statement => (self, compiler) {
             compiler.emit(Opcode::OpReturnValue);
             Ok(())
         }
-        _ => todo!(),
     }
 });
 
 impl_compile!(LetStatement => (self, compiler) {
     self.value.compile(compiler)?;
-    let index = compiler.symbol_table.define(&self.name.value).index;
-    compiler.emit_with_operands(Opcode::OpSetGlobal, &[index]);
+    let symbol = compiler.symbol_table_stack.define(&self.name.value);
+    let op = if symbol.is_global() {
+        Opcode::OpSetGlobal
+    } else {
+        Opcode::OpSetLocal
+    };
+    let index = symbol.index.clone();
+    compiler.emit_with_operands(op, &[index]);
     Ok(())
 });
 
@@ -328,10 +338,16 @@ impl_compile!(BlockStatement => (self, compiler) {
 });
 
 impl_compile!(Identifier => (self, compiler) {
-    let index = compiler.symbol_table.resolve(&self.value).expect(
+    let symbol = compiler.symbol_table_stack.resolve(&self.value).expect(
         &format!("undefined variable: {}", self.value)
-    ).index;
-    compiler.emit_with_operands(Opcode::OpGetGlobal, &[index]);
+    );
+    let op = if symbol.is_global() {
+        Opcode::OpGetGlobal
+    } else {
+        Opcode::OpGetLocal
+    };
+    let index = symbol.index.clone();
+    compiler.emit_with_operands(op, &[index]);
     Ok(())
 });
 
@@ -880,9 +896,9 @@ mod tests {
 
     #[test]
     fn test_compiler_scopes() {
-        let mut symbol_table = new_symbol_table();
+        let mut symbol_table_stack = new_symbol_table_stack();
         let mut constants = new_constants();
-        let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
+        let mut compiler = Compiler::new_with_state(&mut symbol_table_stack, &mut constants);
         assert_eq!(compiler.scope_index, 0);
         compiler.emit(Opcode::OpMul);
 
@@ -895,9 +911,11 @@ mod tests {
         );
         let last = &compiler.scopes[compiler.scope_index].last_instruction;
         assert_eq!(last.as_ref().unwrap().opcode, Opcode::OpSub);
+        assert_eq!(compiler.symbol_table_stack.stack.len(), 2);
 
         compiler.leave_scope();
         assert_eq!(compiler.scope_index, 0);
+        assert_eq!(compiler.symbol_table_stack.stack.len(), 1);
 
         compiler.emit(Opcode::OpAdd);
         assert_eq!(
@@ -952,13 +970,88 @@ mod tests {
         run_compile_tests(tests);
     }
 
+    #[test]
+    fn test_let_statement_scopes() {
+        let tests = vec![
+            (
+                r#"
+                let num = 55;
+                fn() { num }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpGetGlobal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let num = 55;
+                    num
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                fn() {
+                    let a = 55;
+                    let b = 77;
+                    a + b
+                }
+                "#,
+                vec![
+                    Expect::Integer(55),
+                    Expect::Integer(77),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpConstant, &[0]),
+                        make_with_operands(Opcode::OpSetLocal, &[0]),
+                        make_with_operands(Opcode::OpConstant, &[1]),
+                        make_with_operands(Opcode::OpSetLocal, &[1]),
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make_with_operands(Opcode::OpGetLocal, &[1]),
+                        make(Opcode::OpAdd),
+                        make(Opcode::OpReturnValue),
+                    ]),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+        ];
+
+        run_compile_tests(tests);
+    }
+
     fn run_compile_tests<T: Expectable>(tests: Vec<(&str, Vec<T>, Vec<Instructions>)>) {
         for (input, expected_constants, expected_instructions) in tests {
             let program = parse(input.to_string());
 
-            let mut symbol_table = new_symbol_table();
+            let mut symbol_table_stack = new_symbol_table_stack();
             let mut constants = new_constants();
-            let mut compiler = Compiler::new_with_state(&mut symbol_table, &mut constants);
+            let mut compiler = Compiler::new_with_state(&mut symbol_table_stack, &mut constants);
             if let Err(err) = compiler.compile(program) {
                 assert!(false, "compile error. {}", err)
             }

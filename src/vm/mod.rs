@@ -633,9 +633,9 @@ mod tests {
     fn run_vm_tests<T: Expectable>(tests: Vec<(&str, T)>) {
         for (input, expected) in tests {
             let program = parse(input.to_string());
-            let mut symbol_table = new_symbol_table();
+            let mut symbol_table_stack = new_symbol_table_stack();
             let mut constants = new_constants();
-            let mut comp = Compiler::new_with_state(&mut symbol_table, &mut constants);
+            let mut comp = Compiler::new_with_state(&mut symbol_table_stack, &mut constants);
             if let Err(err) = comp.compile(program) {
                 assert!(false, "compile error: {}", err);
             }

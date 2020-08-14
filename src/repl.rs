@@ -7,7 +7,7 @@ pub fn start() {
 
     let mut constants = compiler::new_constants();
     let mut globals = vm::new_globals_store();
-    let mut symbol_table = compiler::new_symbol_table();
+    let mut symbol_table_stack = compiler::new_symbol_table_stack();
 
     loop {
         print!("{}", PROMPT);
@@ -25,7 +25,7 @@ pub fn start() {
             continue;
         }
 
-        let mut comp = compiler::Compiler::new_with_state(&mut symbol_table, &mut constants);
+        let mut comp = compiler::Compiler::new_with_state(&mut symbol_table_stack, &mut constants);
         if let Err(err) = comp.compile(program) {
             println!("Woops! Compilation failed:\n {}", err);
             continue;
