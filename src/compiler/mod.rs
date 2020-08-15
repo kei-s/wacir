@@ -401,7 +401,10 @@ impl_compile!(FunctionLiteral => (self, compiler) {
 
 impl_compile!(CallExpression => (self, compiler) {
     self.function.compile(compiler)?;
-    compiler.emit(Opcode::OpCall);
+    for a in &self.arguments {
+        a.compile(compiler)?;
+    }
+    compiler.emit_with_operands(Opcode::OpCall, &[self.arguments.len()]);
     Ok(())
 });
 
@@ -943,15 +946,15 @@ mod tests {
                 ],
                 vec![
                     make_with_operands(Opcode::OpConstant, &[1]),
-                    make(Opcode::OpCall),
+                    make_with_operands(Opcode::OpCall, &[0]),
                     make(Opcode::OpPop),
                 ],
             ),
             (
                 r#"
-            let noArg = fn() { 24 };
-            noArg();
-            "#,
+                let noArg = fn() { 24 };
+                noArg();
+                "#,
                 vec![
                     Expect::Integer(24),
                     Expect::Instructions(vec![
@@ -963,7 +966,47 @@ mod tests {
                     make_with_operands(Opcode::OpConstant, &[1]),
                     make_with_operands(Opcode::OpSetGlobal, &[0]),
                     make_with_operands(Opcode::OpGetGlobal, &[0]),
-                    make(Opcode::OpCall),
+                    make_with_operands(Opcode::OpCall, &[0]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                let oneArg = fn(a) { };
+                oneArg(24);
+                "#,
+                vec![
+                    Expect::Instructions(vec![make(Opcode::OpReturn)]),
+                    Expect::Integer(24),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpGetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpCall, &[1]),
+                    make(Opcode::OpPop),
+                ],
+            ),
+            (
+                r#"
+                let manyArg = fn(a, b, c) { };
+                manyArg(24, 25, 26);
+                "#,
+                vec![
+                    Expect::Instructions(vec![make(Opcode::OpReturn)]),
+                    Expect::Integer(24),
+                    Expect::Integer(25),
+                    Expect::Integer(26),
+                ],
+                vec![
+                    make_with_operands(Opcode::OpConstant, &[0]),
+                    make_with_operands(Opcode::OpSetGlobal, &[0]),
+                    make_with_operands(Opcode::OpGetGlobal, &[0]),
+                    make_with_operands(Opcode::OpConstant, &[1]),
+                    make_with_operands(Opcode::OpConstant, &[2]),
+                    make_with_operands(Opcode::OpConstant, &[3]),
+                    make_with_operands(Opcode::OpCall, &[3]),
                     make(Opcode::OpPop),
                 ],
             ),

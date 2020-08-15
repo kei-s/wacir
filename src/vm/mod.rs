@@ -139,6 +139,7 @@ impl<'a> VM<'a> {
                     self.execute_index_expression(left, index)?;
                 }
                 Opcode::OpCall => {
+                    self.current_frame().ip += 1;
                     let obj = &self.stack[self.sp - 1];
                     if let Object::CompiledFunction(func) = obj {
                         // TODO: clone() でいいのか？ self.stack から pop したものじゃダメ？
