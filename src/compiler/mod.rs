@@ -384,6 +384,9 @@ impl_compile!(IndexExpression => (self, compiler) {
 
 impl_compile!(FunctionLiteral => (self, compiler) {
     compiler.enter_scope();
+    for p in &self.parameters {
+        compiler.symbol_table_stack.define(&p.value);
+    }
     self.body.compile(compiler)?;
     if compiler.last_instruction_is(Opcode::OpPop) {
         compiler.replace_last_pop_with_return();
@@ -972,11 +975,14 @@ mod tests {
             ),
             (
                 r#"
-                let oneArg = fn(a) { };
+                let oneArg = fn(a) { a };
                 oneArg(24);
                 "#,
                 vec![
-                    Expect::Instructions(vec![make(Opcode::OpReturn)]),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpReturnValue),
+                    ]),
                     Expect::Integer(24),
                 ],
                 vec![
@@ -990,11 +996,18 @@ mod tests {
             ),
             (
                 r#"
-                let manyArg = fn(a, b, c) { };
+                let manyArg = fn(a, b, c) { a; b; c };
                 manyArg(24, 25, 26);
                 "#,
                 vec![
-                    Expect::Instructions(vec![make(Opcode::OpReturn)]),
+                    Expect::Instructions(vec![
+                        make_with_operands(Opcode::OpGetLocal, &[0]),
+                        make(Opcode::OpPop),
+                        make_with_operands(Opcode::OpGetLocal, &[1]),
+                        make(Opcode::OpPop),
+                        make_with_operands(Opcode::OpGetLocal, &[2]),
+                        make(Opcode::OpReturnValue),
+                    ]),
                     Expect::Integer(24),
                     Expect::Integer(25),
                     Expect::Integer(26),
