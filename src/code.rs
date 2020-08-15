@@ -230,6 +230,10 @@ pub fn read_uint16(ins: &Instructions, start: usize) -> u16 {
     u16::from_be_bytes(ins.0[start..start + 2].try_into().unwrap())
 }
 
+pub fn read_uint8(ins: &Instructions, start: usize) -> u8 {
+    u8::from_be_bytes(ins.0[start..start + 1].try_into().unwrap())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -4,6 +4,7 @@ use super::super::object::CompiledFunction;
 pub struct Frame {
     func: CompiledFunction,
     pub ip: usize,
+    pub base_pointer: usize,
 }
 
 impl Frame {
@@ -12,6 +13,10 @@ impl Frame {
     }
 }
 
-pub fn new_frame(func: CompiledFunction) -> Frame {
-    Frame { func, ip: 0 }
+pub fn new_frame(func: CompiledFunction, base_pointer: usize) -> Frame {
+    Frame {
+        func,
+        ip: 0,
+        base_pointer,
+    }
 }

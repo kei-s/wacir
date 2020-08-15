@@ -34,8 +34,9 @@ impl<'a> VM<'a> {
     pub fn new_with_globals_store(bytecode: ByteCode<'a>, s: &'a mut Vec<Object>) -> VM<'a> {
         let main_fn = object::CompiledFunction {
             instructions: bytecode.instructions,
+            num_locals: 0,
         };
-        let main_frame = new_frame(main_fn);
+        let main_frame = new_frame(main_fn, 0);
 
         let mut frames = Vec::with_capacity(MAX_FRAMES);
         frames.push(main_frame);
@@ -141,8 +142,10 @@ impl<'a> VM<'a> {
                     let obj = &self.stack[self.sp - 1];
                     if let Object::CompiledFunction(func) = obj {
                         // TODO: clone() でいいのか？ self.stack から pop したものじゃダメ？
-                        let frame = new_frame(func.clone());
+                        let frame = new_frame(func.clone(), self.sp);
+                        let next_sp = frame.base_pointer + func.num_locals;
                         self.push_frame(frame);
+                        self.sp = next_sp;
                         // self.current_frame().ip += 1; させないために continue する
                         continue;
                     } else {
@@ -151,17 +154,41 @@ impl<'a> VM<'a> {
                 }
                 Opcode::OpReturnValue => {
                     let return_value = self.pop();
-                    self.pop_frame();
-                    self.pop();
+                    let frame = self.pop_frame();
+                    self.sp = frame.base_pointer - 1;
+                    self.stack.truncate(self.sp);
                     self.push(return_value)?;
                 }
                 Opcode::OpReturn => {
-                    self.pop_frame();
-                    self.pop();
+                    let frame = self.pop_frame();
+                    self.sp = frame.base_pointer - 1;
+                    self.stack.truncate(self.sp);
                     self.push(NULL)?;
                 }
+                Opcode::OpSetLocal => {
+                    let local_index = read_uint8(ins, ip + 1) as usize;
+                    self.current_frame().ip += 1;
+
+                    let popped = self.pop();
+                    let base_poiner = self.current_frame().base_pointer;
+                    let index = base_poiner + local_index;
+                    if index < self.stack.len() {
+                        self.stack[index] = popped;
+                    } else if index == self.stack.len() {
+                        self.stack.push(popped);
+                    } else {
+                        return Err(format!("unexpected stack index: {}", index).to_string());
+                    }
+                }
+                Opcode::OpGetLocal => {
+                    let local_index = read_uint8(ins, ip + 1) as usize;
+                    self.current_frame().ip += 1;
+
+                    let base_poiner = self.current_frame().base_pointer;
+                    self.push(self.stack[base_poiner + local_index].clone())?;
+                }
                 //
-                _ => todo!("unknown Opcode: {:?}", op),
+                // _ => todo!("unknown Opcode: {:?}", op),
             }
             self.current_frame().ip += 1;
         }
@@ -621,12 +648,66 @@ mod tests {
     fn test_first_class_functions() {
         let tests = vec![(
             r#"
-            let returnsOne = fn() { 1; };
-            let returnsOneReturner = fn() { returnsOne };
+            let returnsOneReturner = fn() {
+              let returnsOne = fn() { 1; };
+              returnsOne;
+            };
             returnsOneReturner()();
             "#,
             1,
         )];
+        run_vm_tests(tests);
+    }
+
+    #[test]
+    fn test_calling_functions_with_bindings() {
+        let tests = vec![
+            (
+                r#"
+                let one = fn() { let one = 1; one };
+                one();
+                "#,
+                1,
+            ),
+            (
+                r#"
+                let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+                oneAndTwo();
+                "#,
+                3,
+            ),
+            (
+                r#"
+                let oneAndTwo = fn() { let one = 1; let two = 2; one + two; };
+                let threeAndFour = fn() { let three = 3; let four = 4; three + four; };
+                oneAndTwo() + threeAndFour();
+                "#,
+                10,
+            ),
+            (
+                r#"
+                let firstFoobar = fn() { let foobar = 50; foobar; };
+                let secondFoobar = fn() { let foobar = 100; foobar; };
+                firstFoobar() + secondFoobar();
+                "#,
+                150,
+            ),
+            (
+                r#"
+                let globalSeed = 50;
+                let minusOne = fn() {
+                    let num = 1;
+                    globalSeed - num;
+                }
+                let minusTwo = fn() {
+                    let num = 2;
+                    globalSeed - num;
+                }
+                minusOne() + minusTwo();
+                "#,
+                97,
+            ),
+        ];
         run_vm_tests(tests);
     }
 

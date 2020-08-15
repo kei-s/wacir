@@ -391,8 +391,9 @@ impl_compile!(FunctionLiteral => (self, compiler) {
     if !compiler.last_instruction_is(Opcode::OpReturnValue) {
         compiler.emit(Opcode::OpReturn);
     }
+    let num_locals = compiler.symbol_table_stack.last().num_definitions;
     let instructions = compiler.leave_scope();
-    let compiled_fn = Object::CompiledFunction(object::CompiledFunction{instructions});
+    let compiled_fn = Object::CompiledFunction(object::CompiledFunction{instructions, num_locals});
     let operand = compiler.add_constant(compiled_fn);
     compiler.emit_with_operands(Opcode::OpConstant, &[operand]);
     Ok(())

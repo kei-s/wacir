@@ -21,7 +21,7 @@ impl Symbol {
 
 pub struct SymbolTable {
     store: HashMap<String, Symbol>,
-    num_definitions: usize,
+    pub num_definitions: usize,
 }
 
 pub struct SymbolTableStack {
@@ -38,6 +38,10 @@ impl SymbolTableStack {
 
     pub fn pop(&mut self) -> SymbolTable {
         self.stack.pop().expect("Popped global symbol_table")
+    }
+
+    pub fn last(&self) -> &SymbolTable {
+        self.stack.last().expect("There are no symbol_table")
     }
 
     pub fn define(&mut self, name: &str) -> &Symbol {
